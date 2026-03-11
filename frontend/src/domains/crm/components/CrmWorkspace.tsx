@@ -4,17 +4,21 @@ import {
   MetricTile,
   StatusPill,
   WorkspaceSection,
-  heroPanelClass,
   dangerButtonClass,
+  filterBarClass,
+  heroPanelClass,
   inputClass,
   labelClass,
   primaryButtonClass,
   secondaryButtonClass,
-  textareaClass,
   subtlePanelClass,
+  tableBodyCellClass,
+  tableHeaderCellClass,
   tableShellClass,
+  textareaClass,
   workspacePageClass
 } from "../../../shared/ui/WorkspaceUi";
+
 
 type Contact = {
   id: string;
@@ -207,15 +211,14 @@ export function CrmWorkspace({
   return (
     <section className={workspacePageClass}>
       <section className={heroPanelClass}>
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.95fr)]">
-          <div className="space-y-3">
+        <div className="grid gap-5 xl:grid-cols-12">
+          <div className="space-y-3 xl:col-span-7">
             <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">CRM</span>
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">Relacao com clientes organizada em camadas claras</h2>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">Ajustei a densidade visual, os tamanhos dos campos e a separacao das areas para deixar o CRM no mesmo patamar da tela de WhatsApp.</p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">CRM</h2>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
             <MetricTile label="Contatos" value={String(contacts.length)} detail="Base ativa de clientes e leads" tone="blue" />
             <MetricTile label="Campanhas" value={String(scheduledBroadcasts.length)} detail="Disparos criados na plataforma" tone="emerald" />
             <MetricTile label="Fluxos ativos" value={String(activeAutomations)} detail="Automacoes operando no tenant" tone="slate" />
@@ -224,16 +227,15 @@ export function CrmWorkspace({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)]">
         <WorkspaceSection
           eyebrow="Contatos"
           title={editingContactId ? "Editar contato" : "Cadastrar contato"}
-          description="Campos compactos e com agrupamento logico. A importacao rapida virou um bloco proprio para nao competir com o cadastro manual."
-        >
+       >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
             <label className={labelClass} htmlFor="contact-name">
               Nome do contato
-              <input id="contact-name" className={inputClass} placeholder="Ex.: Joao Ribeiro" value={contactDraft.name} onChange={(event) => setContactDraft((prev) => ({ ...prev, name: event.target.value }))} />
+              <input id="contact-name" className={inputClass} value={contactDraft.name} onChange={(event) => setContactDraft((prev) => ({ ...prev, name: event.target.value }))} />
             </label>
             <label className={labelClass} htmlFor="contact-phone">
               WhatsApp
@@ -254,11 +256,11 @@ export function CrmWorkspace({
             </label>
             <label className={`${labelClass} md:col-span-2`} htmlFor="contact-tags">
               Tags
-              <input id="contact-tags" className={inputClass} placeholder="Lead VIP, retorno, pos-venda" value={contactDraft.tags} onChange={(event) => setContactDraft((prev) => ({ ...prev, tags: event.target.value }))} />
+              <input id="contact-tags" className={inputClass} value={contactDraft.tags} onChange={(event) => setContactDraft((prev) => ({ ...prev, tags: event.target.value }))} />
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-3">
             {editingContactId && <button type="button" className={secondaryButtonClass} onClick={cancelContactEdit}>Cancelar</button>}
             <button type="button" className={primaryButtonClass} onClick={saveContact}>{editingContactId ? "Salvar contato" : "Cadastrar contato"}</button>
           </div>
@@ -267,9 +269,9 @@ export function CrmWorkspace({
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">Importacao rapida</p>
-                <p className="text-sm leading-6 text-slate-500">Formato suportado: nome;telefone;estado;status;tag1,tag2</p>
+                <p className="text-sm leading-6 text-slate-500">nome;telefone;estado;status;tag1,tag2</p>
               </div>
-              <textarea className={textareaClass} value={contactImportRaw} onChange={(event) => setContactImportRaw(event.target.value)} placeholder="Maria;5511999999999;SP;Cliente ativo;vip,pos-venda" />
+              <textarea className={textareaClass} value={contactImportRaw} onChange={(event) => setContactImportRaw(event.target.value)} />
               <div className="flex justify-end">
                 <button type="button" className={secondaryButtonClass} onClick={importContacts}>Importar contatos</button>
               </div>
@@ -280,13 +282,12 @@ export function CrmWorkspace({
         <WorkspaceSection
           eyebrow="Campanhas"
           title="Disparos para lista de clientes"
-          description="O agendamento agora fica em um card proprio, com melhor leitura do publico selecionado e historico dos disparos criados."
-          actions={<StatusPill tone="blue">{selectedBroadcastContacts.length} selecionado(s)</StatusPill>}
+         actions={<StatusPill tone="blue">{selectedBroadcastContacts.length} selecionado(s)</StatusPill>}
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
             <label className={labelClass} htmlFor="broadcast-name">
               Nome da campanha
-              <input id="broadcast-name" className={inputClass} value={broadcastDraft.name} onChange={(event) => setBroadcastDraft((prev) => ({ ...prev, name: event.target.value }))} placeholder="Ex.: Reativacao de clientes" />
+              <input id="broadcast-name" className={inputClass} value={broadcastDraft.name} onChange={(event) => setBroadcastDraft((prev) => ({ ...prev, name: event.target.value }))} />
             </label>
             <label className={labelClass} htmlFor="broadcast-date">
               Data e horario
@@ -305,11 +306,11 @@ export function CrmWorkspace({
             </div>
             <label className={`${labelClass} md:col-span-2`} htmlFor="broadcast-template">
               Mensagem da campanha
-              <textarea id="broadcast-template" className={textareaClass} value={broadcastDraft.messageTemplate} onChange={(event) => setBroadcastDraft((prev) => ({ ...prev, messageTemplate: event.target.value }))} placeholder="Use {cliente} para personalizar a mensagem." />
+              <textarea id="broadcast-template" className={textareaClass} value={broadcastDraft.messageTemplate} onChange={(event) => setBroadcastDraft((prev) => ({ ...prev, messageTemplate: event.target.value }))} />
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-3">
             <button type="button" className={primaryButtonClass} onClick={saveBroadcast}>Agendar disparo</button>
           </div>
 
@@ -336,82 +337,81 @@ export function CrmWorkspace({
       <WorkspaceSection
         eyebrow="Base de contatos"
         title="Contatos da empresa"
-        description="Os filtros e a tabela foram reorganizados para reduzir poluicao visual e facilitar selecao para campanhas."
-        actions={<StatusPill tone="slate">{filteredContacts.length} contato(s)</StatusPill>}
+       actions={<StatusPill tone="slate">{filteredContacts.length} contato(s)</StatusPill>}
       >
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_180px_220px_220px_auto]">
-          <label className={labelClass} htmlFor="contact-search">
+        <div className={`${filterBarClass} xl:grid-cols-12`}>
+          <label className={`${labelClass} xl:col-span-5`} htmlFor="contact-search">
             Buscar
             <input id="contact-search" className={inputClass} placeholder="Nome, telefone ou responsavel" value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} />
           </label>
-          <label className={labelClass} htmlFor="contact-state-filter">
+          <label className={`${labelClass} xl:col-span-2`} htmlFor="contact-state-filter">
             UF
             <select id="contact-state-filter" className={inputClass} value={contactStateFilter} onChange={(event) => setContactStateFilter(event.target.value)}>
               <option value="">Todos os estados</option>
               {stateOptions.filter(Boolean).map((state) => <option key={state} value={state}>{state}</option>)}
             </select>
           </label>
-          <label className={labelClass} htmlFor="contact-status-filter">
+          <label className={`${labelClass} xl:col-span-2`} htmlFor="contact-status-filter">
             Status
             <select id="contact-status-filter" className={inputClass} value={contactStatusFilter} onChange={(event) => setContactStatusFilter(event.target.value)}>
               <option value="">Todos os status</option>
               {contactStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
           </label>
-          <label className={labelClass} htmlFor="contact-tag-filter">
+          <label className={`${labelClass} xl:col-span-2`} htmlFor="contact-tag-filter">
             Tag
             <select id="contact-tag-filter" className={inputClass} value={contactTagFilter} onChange={(event) => setContactTagFilter(event.target.value)}>
               <option value="">Todas as tags</option>
               {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
             </select>
           </label>
-          <div className="flex items-end justify-start xl:justify-end">
+          <div className="flex items-end justify-start xl:col-span-1 xl:justify-end">
             <StatusPill tone="blue">{selectedBroadcastContacts.length} selecionado(s)</StatusPill>
           </div>
         </div>
 
         <div className={tableShellClass}>
           <div className="overflow-auto">
-            <table className="min-w-[1220px] divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  <th className="px-4 py-3">Selecionar</th>
-                  <th className="px-4 py-3">Nome</th>
-                  <th className="px-4 py-3">WhatsApp</th>
-                  <th className="px-4 py-3">UF</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Tags</th>
-                  <th className="px-4 py-3">Responsavel</th>
-                  <th className="px-4 py-3">Criado em</th>
-                  <th className="px-4 py-3">Acoes</th>
+            <table className="min-w-[1080px] divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50/90">
+                <tr>
+                  <th className={tableHeaderCellClass}>Selecionar</th>
+                  <th className={tableHeaderCellClass}>Nome</th>
+                  <th className={tableHeaderCellClass}>WhatsApp</th>
+                  <th className={tableHeaderCellClass}>UF</th>
+                  <th className={tableHeaderCellClass}>Status</th>
+                  <th className={tableHeaderCellClass}>Tags</th>
+                  <th className={tableHeaderCellClass}>Responsavel</th>
+                  <th className={tableHeaderCellClass}>Criado em</th>
+                  <th className={tableHeaderCellClass}>Acoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {filteredContacts.map((contact) => (
                   <tr key={contact.id} className="align-top">
-                    <td className="px-4 py-4">
+                    <td className={tableBodyCellClass}>
                       <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
                         <input className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" type="checkbox" checked={selectedBroadcastContacts.includes(contact.id)} onChange={() => toggleBroadcastContact(contact.id)} />
                         Selecionar
                       </label>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className={tableBodyCellClass}>
                       <div className="space-y-1">
                         <strong className="block font-semibold text-slate-900">{contact.name}</strong>
                         <span className="text-xs text-slate-500">ID {contact.id.slice(0, 8)}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{contact.phone}</td>
-                    <td className="px-4 py-4 text-slate-600">{contact.state ?? "-"}</td>
-                    <td className="px-4 py-4">{contact.status ? <StatusPill tone="emerald">{contact.status}</StatusPill> : <span className="text-slate-400">Sem status</span>}</td>
-                    <td className="px-4 py-4">
+                    <td className={tableBodyCellClass}>{contact.phone}</td>
+                    <td className={tableBodyCellClass}>{contact.state ?? "-"}</td>
+                    <td className={tableBodyCellClass}>{contact.status ? <StatusPill tone="emerald">{contact.status}</StatusPill> : <span className="text-slate-400">Sem status</span>}</td>
+                    <td className={tableBodyCellClass}>
                       <div className="flex flex-wrap gap-2">
                         {contact.tags.length > 0 ? contact.tags.map((tag) => <StatusPill key={tag} tone="slate">{tag}</StatusPill>) : <span className="text-slate-400">Sem tags</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{contact.ownerName ?? "Nao definido"}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(contact.createdAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className={tableBodyCellClass}>{contact.ownerName ?? "Nao definido"}</td>
+                    <td className={tableBodyCellClass}>{formatDate(contact.createdAt)}</td>
+                    <td className={tableBodyCellClass}>
                       <div className="flex flex-wrap items-center gap-2">
                         <button type="button" className={secondaryButtonClass} onClick={() => editContact(contact)}>Editar</button>
                         <button type="button" className={dangerButtonClass} onClick={() => deleteContact(contact.id)}>Excluir</button>
@@ -427,16 +427,15 @@ export function CrmWorkspace({
         {filteredContacts.length === 0 && <EmptyStatePanel>Nenhum contato encontrado com os filtros atuais.</EmptyStatePanel>}
       </WorkspaceSection>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)]">
         <WorkspaceSection
           eyebrow="Fluxos"
           title={editingAutomationId ? "Editar fluxo automatico" : "Fluxos de atendimento automatico"}
-          description="Mesma informacao funcional, agora com formulario menos esticado e cards mais escaneaveis para cada regra criada."
-        >
+       >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-5">
             <label className={labelClass} htmlFor="automation-name">
               Nome do fluxo
-              <input id="automation-name" className={inputClass} value={automationDraft.name} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, name: event.target.value }))} placeholder="Ex.: Triagem inicial" />
+              <input id="automation-name" className={inputClass} value={automationDraft.name} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, name: event.target.value }))} />
             </label>
             <label className={labelClass} htmlFor="automation-priority">
               Prioridade
@@ -446,7 +445,7 @@ export function CrmWorkspace({
             </label>
             <label className={labelClass} htmlFor="automation-keywords">
               Palavras-chave
-              <input id="automation-keywords" className={inputClass} value={automationDraft.triggerKeywords} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, triggerKeywords: event.target.value }))} placeholder="consulta, horario, cardiologia" />
+              <input id="automation-keywords" className={inputClass} value={automationDraft.triggerKeywords} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, triggerKeywords: event.target.value }))} />
             </label>
             <label className={labelClass} htmlFor="automation-escalate">
               Tratamento
@@ -465,11 +464,11 @@ export function CrmWorkspace({
             <div className="hidden md:block" aria-hidden="true" />
             <label className={`${labelClass} md:col-span-2`} htmlFor="automation-template">
               Resposta automatica
-              <textarea id="automation-template" className={textareaClass} value={automationDraft.responseTemplate} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, responseTemplate: event.target.value }))} placeholder="Mensagem usada pela IA quando o gatilho for reconhecido." />
+              <textarea id="automation-template" className={textareaClass} value={automationDraft.responseTemplate} onChange={(event) => setAutomationDraft((prev) => ({ ...prev, responseTemplate: event.target.value }))} />
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-3">
             {editingAutomationId && <button type="button" className={secondaryButtonClass} onClick={cancelAutomationEdit}>Cancelar</button>}
             <button type="button" className={primaryButtonClass} onClick={saveAutomationOption}>{editingAutomationId ? "Salvar fluxo" : "Criar fluxo"}</button>
           </div>
@@ -502,8 +501,7 @@ export function CrmWorkspace({
           <WorkspaceSection
             eyebrow="Fila"
             title="Clientes aguardando atendimento"
-            description="Este bloco ganhou contraste e legibilidade para destacar o tempo de espera."
-          >
+         >
             <div className="grid gap-3">
               {queueHealth?.unattended.map((item) => (
                 <article key={item.conversationId} className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60">
@@ -524,8 +522,7 @@ export function CrmWorkspace({
           <WorkspaceSection
             eyebrow="Feedback"
             title="Avaliacoes registradas"
-            description="Feedback de clientes em um card mais consistente com o restante do sistema."
-          >
+         >
             <div className="grid gap-3">
               {feedbackList.map((item) => (
                 <article key={item.id} className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60">
@@ -547,7 +544,3 @@ export function CrmWorkspace({
     </section>
   );
 }
-
-
-
-

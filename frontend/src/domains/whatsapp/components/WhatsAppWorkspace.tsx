@@ -95,7 +95,7 @@ function ChannelOptionCard({
           {message && <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">{message}</div>}
         </div>
 
-        <div className="mt-auto flex justify-start">
+        <div className="flex justify-start pt-1">
           <button type="button" className={primaryButtonClass} onClick={onAction}>{ctaLabel}</button>
         </div>
       </div>
@@ -230,7 +230,7 @@ export function WhatsAppWorkspace({
   const [setupTesting, setSetupTesting] = useState(false);
   const [showSetupForm, setShowSetupForm] = useState(false);
   const [setupDraft, setSetupDraft] = useState<MetaBootstrapDraft>({
-    displayName: "WhatsApp principal",
+    displayName: "",
     phoneNumberId: "",
     accessToken: "",
     isPrimary: true
@@ -253,7 +253,7 @@ export function WhatsAppWorkspace({
       const data = await fetchMetaSetup(apiBase, authToken);
       setSetup(data);
       setSetupDraft((current) => ({
-        displayName: current.displayName || data.displayName || "WhatsApp principal",
+        displayName: current.displayName || data.displayName || "",
         phoneNumberId: current.phoneNumberId || data.phoneNumberId || "",
         accessToken: "",
         isPrimary: current.isPrimary
@@ -348,7 +348,7 @@ export function WhatsAppWorkspace({
 
     try {
       const result: MetaWhatsAppBootstrapResult = await bootstrapMetaChannel(apiBase, authToken, {
-        displayName: setupDraft.displayName.trim() || "WhatsApp principal",
+        displayName: setupDraft.displayName.trim() || "WhatsApp",
         phoneNumberId: setupDraft.phoneNumberId.trim(),
         accessToken: setupDraft.accessToken.trim(),
         isPrimary: setupDraft.isPrimary
@@ -598,39 +598,42 @@ export function WhatsAppWorkspace({
       : undefined;
 
   const metaDetail = metaReady
-    ? `Canal pronto para uso: ${setup?.displayName ?? metaAvailability.activeChannelName ?? "WhatsApp principal"}.`
+    ? `Canal pronto: ${setup?.displayName ?? metaAvailability.activeChannelName ?? "WhatsApp"}.`
     : hasPreparedChannel
-      ? "O canal ja foi preparado. Falta finalizar a etapa na Meta e testar a conexao."
-      : "Conecte o numero uma vez e depois toda a operacao acontece no Atendimento do CRM.";
+      ? "Falta validar na Meta e testar."
+      : "Cadastre um numero para continuar.";
 
   const viewerMessage =
     webLaunchState === "embedding"
-      ? "Estamos tentando abrir o WhatsApp Web dentro do painel. Se o proprio WhatsApp bloquear o iframe, a plataforma vai manter voce no CRM e abrir uma janela auxiliar automaticamente."
-      : webMessage || "Use o WhatsApp Web sem perder o contexto da operacao.";
+      ? "Tentando abrir no painel."
+      : webMessage || "Use o WhatsApp Web como apoio.";
 
   return (
     <section className={workspacePageClass}>
-      <header className="space-y-3">
-        <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">WhatsApp</span>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">Conecte varios numeros da empresa e opere tudo no CRM</h2>
-          <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">Deixamos a configuracao tecnica escondida. Aqui voce prepara um ou varios canais com poucos dados, finaliza a validacao na Meta e depois atende clientes direto pelo CRM.</p>
-        </div>
-      </header>
+      <section className={heroPanelClass}>
+        <div className="grid gap-5 xl:grid-cols-12">
+          <header className="space-y-3 xl:col-span-7">
+            <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">WhatsApp</span>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">WhatsApp</h2>
+              
+            </div>
+          </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile label="Status do canal" value={statusLabel} detail={metaDetail} tone={statusTone} />
-        <MetricTile label="Canais usados" value={`${whatsAppChannels.length}/${whatsAppChannelLimit || 0}`} detail="Capacidade do plano atual." tone="blue" />
-        <MetricTile label="Canais ativos" value={String(activeChannels)} detail="Numeros liberados para operacao." tone="slate" />
-        <MetricTile label="Canais prontos" value={String(readyChannels)} detail="Ja validados para abrir no Atendimento." tone="emerald" />
+          <section className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
+            <MetricTile label="Status do canal" value={statusLabel} detail={metaDetail} tone={statusTone} />
+            <MetricTile label="Canais usados" value={`${whatsAppChannels.length}/${whatsAppChannelLimit || 0}`} detail="Capacidade do plano atual." tone="blue" />
+            <MetricTile label="Canais ativos" value={String(activeChannels)} detail="Numeros liberados para operacao." tone="slate" />
+            <MetricTile label="Canais prontos" value={String(readyChannels)} detail="Ja validados para abrir no Atendimento." tone="emerald" />
+          </section>
+        </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(330px,0.8fr)]">
         <WorkspaceSection
           eyebrow="Assistente de conexao"
           title={hasPreparedChannel ? "Gerencie os canais da empresa" : "Prepare o primeiro numero"}
-          description="Foque so no necessario: nome do canal, ID do numero e token de acesso. O sistema gera o codigo de validacao sozinho e deixa o uso multi-canal mais simples para o cliente."
-          actions={
+         actions={
             hasPreparedChannel ? (
               <div className="flex flex-wrap items-center gap-3">
                 <StatusPill tone={remainingChannels > 0 ? "blue" : "amber"}>{remainingChannels} vaga(s) restante(s)</StatusPill>
@@ -646,7 +649,7 @@ export function WhatsAppWorkspace({
         >
           <div className="space-y-5">
             {setupLoading ? (
-              <EmptyStatePanel>Carregando a assistencia de conexao do WhatsApp...</EmptyStatePanel>
+              <EmptyStatePanel>Carregando canais.</EmptyStatePanel>
             ) : (
               <>
                 {setupFeedback && (
@@ -656,14 +659,14 @@ export function WhatsAppWorkspace({
                 )}
 
                 {(showSetupForm || !hasPreparedChannel) && (
-                  <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="grid gap-4 xl:grid-cols-2">
                     <label className={labelClass}>
                       Nome do canal
                       <input
                         className={inputClass}
                         value={setupDraft.displayName}
                         onChange={(event) => setSetupDraft((current) => ({ ...current, displayName: event.target.value }))}
-                        placeholder="Ex.: WhatsApp Matriz"
+                       
                       />
                     </label>
                     <label className={labelClass}>
@@ -672,7 +675,7 @@ export function WhatsAppWorkspace({
                         className={inputClass}
                         value={setupDraft.phoneNumberId}
                         onChange={(event) => setSetupDraft((current) => ({ ...current, phoneNumberId: event.target.value }))}
-                        placeholder="Cole o ID do numero copiado na Meta"
+                       
                       />
                     </label>
                     <label className={`${labelClass} lg:col-span-2`}>
@@ -681,7 +684,7 @@ export function WhatsAppWorkspace({
                         className={textareaClass}
                         value={setupDraft.accessToken}
                         onChange={(event) => setSetupDraft((current) => ({ ...current, accessToken: event.target.value }))}
-                        placeholder="Cole aqui o token temporario ou permanente da Meta. O sistema guarda isso com seguranca e nao exibe para a operacao."
+                       
                       />
                     </label>
                     <div className="lg:col-span-2 grid gap-3 md:grid-cols-2">
@@ -697,8 +700,7 @@ export function WhatsAppWorkspace({
                       </div>
                     </div>
                     <div className="lg:col-span-2 flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-slate-500">Cada numero gera uma rota separada dentro do CRM, com historico proprio e resposta humana pelo inbox interno.</p>
-                      <div className="flex flex-wrap items-center gap-3">
+                     <div className="flex flex-wrap items-center gap-3">
                         <button type="button" className={primaryButtonClass} onClick={handleBootstrapMeta} disabled={setupSaving || limitReached && !whatsAppChannels.some((channel) => channel.phoneNumberId === setupDraft.phoneNumberId.trim())}>
                           {setupSaving ? "Preparando..." : hasPreparedChannel ? "Salvar e adicionar canal" : "Preparar conexao"}
                         </button>
@@ -718,7 +720,7 @@ export function WhatsAppWorkspace({
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-3">
-                            <h4 className="text-lg font-semibold text-slate-950">{setup.displayName ?? "WhatsApp principal"}</h4>
+                            <h4 className="text-lg font-semibold text-slate-950">{setup.displayName || "WhatsApp"}</h4>
                             <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
                           </div>
                           <p className="text-sm leading-6 text-slate-600">{setup.phoneNumberId ? `Numero preparado: ${setup.phoneNumberId}` : "Defina o numero da empresa para continuar."}</p>
@@ -730,7 +732,7 @@ export function WhatsAppWorkspace({
                       </div>
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid gap-4 xl:grid-cols-2">
                       <ReadonlyCopyField
                         label="URL de retorno"
                         value={setup.callbackUrl}
@@ -747,7 +749,7 @@ export function WhatsAppWorkspace({
 
                     <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-5">
                       <div className="space-y-3">
-                        <h4 className="text-base font-semibold text-slate-950">Passo a passo simplificado</h4>
+                        <h4 className="text-base font-semibold text-slate-950">Proxima etapa</h4>
                         <ol className="space-y-3 text-sm leading-6 text-slate-700">
                           <li>1. No painel da Meta, abra o produto WhatsApp e va para a configuracao do webhook.</li>
                           <li>2. Cole a URL de retorno e o codigo de validacao que o sistema gerou para voce.</li>
@@ -763,10 +765,10 @@ export function WhatsAppWorkspace({
           </div>
         </WorkspaceSection>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <ChannelOptionCard
             title="WhatsApp via API da Meta"
-            description="Use o canal oficial da empresa por dentro da plataforma, com fila, historico, IA e handoff para humano no CRM."
+            description="Atenda clientes no CRM."
             statusLabel={metaReady ? "Pronto para operar" : hasPreparedChannel ? "Finalize a ativacao" : "Conecte o canal"}
             statusTone={metaReady ? "emerald" : hasPreparedChannel ? "amber" : "slate"}
             helper={metaReady ? "O canal esta conectado. Agora basta abrir a operacao para conversar com os clientes no inbox interno." : metaDetail}
@@ -778,27 +780,26 @@ export function WhatsAppWorkspace({
 
           <ChannelOptionCard
             title="WhatsApp Web"
-            description="Disponivel como apoio operacional. Tentamos abrir no painel primeiro e caimos para janela auxiliar quando o proprio WhatsApp bloquear a exibicao interna."
+            description="Use como apoio."
             statusLabel="Opcional"
             statusTone="blue"
-            helper="Para atendimento escalavel, o ideal continua sendo operar pelo inbox interno do CRM via API da Meta."
-            footnote="Use o WhatsApp Web apenas como apoio. A automacao, historico e governanca ficam melhores no canal oficial via API."
+            helper="Para a operacao principal, use o inbox interno."
+            footnote="O WhatsApp Web pode bloquear a abertura no painel."
             ctaLabel="Abrir WhatsApp Web"
             onAction={handleOpenWhatsAppWeb}
             message={webMessage}
           />
         </div>
-      </div>
+      </section>
 
-
+      <div className="relative z-0 pt-2">
       <WorkspaceSection
         eyebrow="Canais configurados"
         title="Numeros da empresa"
-        description="Cada canal fica com status proprio, codigo proprio e acoes simples de operacao."
-        actions={<StatusPill tone="slate">{whatsAppChannels.length} canal(is)</StatusPill>}
+       actions={<StatusPill tone="slate">{whatsAppChannels.length} canal(is)</StatusPill>}
       >
         {whatsAppChannels.length === 0 ? (
-          <EmptyStatePanel>Nenhum canal cadastrado ainda. Use o assistente acima para preparar o primeiro numero da empresa.</EmptyStatePanel>
+          <EmptyStatePanel>Nenhum canal cadastrado.</EmptyStatePanel>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {whatsAppChannels.map((channel) => (
@@ -858,13 +859,14 @@ export function WhatsAppWorkspace({
           </div>
         )}
       </WorkspaceSection>
+      </div>
       {webViewerOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/45 p-4 backdrop-blur-sm sm:p-6">
           <div className="mx-auto flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
             <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold text-slate-950">WhatsApp Web</h3>
-                <p className="text-sm leading-6 text-slate-500">Tentamos abrir dentro do painel primeiro e caimos para janela auxiliar quando o proprio WhatsApp Web bloqueia a exibicao interna.</p>
+                <p className="text-sm leading-6 text-slate-500">Se o painel nao abrir, use a janela auxiliar ou a nova aba.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button type="button" className={secondaryButtonClass} onClick={handleOpenWebPopup}>Abrir janela auxiliar</button>
@@ -886,7 +888,7 @@ export function WhatsAppWorkspace({
                   ) : (
                     <div className="flex h-full min-h-[520px] items-center justify-center p-6">
                       <div className="max-w-lg text-center">
-                        <p className="text-sm leading-7 text-slate-500">O navegador nao permitiu manter o WhatsApp Web dentro do painel. Para nao travar sua operacao, a plataforma abriu um fallback mais confiavel.</p>
+                        <p className="text-sm leading-7 text-slate-500">O navegador bloqueou a abertura no painel.</p>
                       </div>
                     </div>
                   )}
@@ -903,7 +905,8 @@ export function WhatsAppWorkspace({
 
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="space-y-3">
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">Diagnostico rapido</span>
+                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">Observacao</span>
+                      <p className="text-sm leading-6 text-slate-600">Se nada abrir, habilite popups para a URL da plataforma e tente novamente.</p>
                       <ul className="space-y-3 text-sm leading-6 text-slate-600">
                         <li>1. Se o painel interno nao abrir, o motivo mais comum e o bloqueio do iframe pelo proprio WhatsApp Web.</li>
                         <li>2. A janela auxiliar costuma ser o melhor fallback para continuar no CRM e conversar no WhatsApp ao mesmo tempo.</li>
@@ -920,21 +923,3 @@ export function WhatsAppWorkspace({
     </section>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

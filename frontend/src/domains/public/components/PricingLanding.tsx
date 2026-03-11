@@ -177,7 +177,7 @@ export function PricingLanding({ onLoginClick }: PricingLandingProps) {
             </span>
             <div className="space-y-4">
               <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl lg:text-[3.4rem] lg:leading-[1.06]">
-                Uma atendente virtual no WhatsApp para substituir o atendimento manual e escalar sua operacao
+                Sua atendente virtual no WhatsApp
               </h1>
               <p className="max-w-3xl text-base leading-8 text-slate-600 sm:text-lg">
                 O Atend.AI assume o primeiro atendimento, responde clientes automaticamente, organiza tudo no CRM e aciona o time humano quando a conversa exige intervencao. Todos os planos incluem a plataforma completa com IA, automacao e WhatsApp oficial.
@@ -297,4 +297,5 @@ export function PricingLanding({ onLoginClick }: PricingLandingProps) {
     </main>
   );
 }
+
 

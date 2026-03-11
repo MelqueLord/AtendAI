@@ -20,16 +20,19 @@ type StatusPillProps = {
   tone?: "slate" | "blue" | "emerald" | "amber" | "rose";
 };
 
-export const workspacePageClass = "mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-8 sm:px-6 xl:px-0";
-export const heroPanelClass = "relative overflow-hidden rounded-[30px] border border-slate-200/80 bg-gradient-to-br from-white via-white to-blue-50/70 p-5 shadow-[0_24px_70px_-55px_rgba(15,23,42,0.42)] sm:p-6";
-export const cardClass = "rounded-[26px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-50px_rgba(15,23,42,0.45)] backdrop-blur";
-export const subtlePanelClass = "rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4";
-export const tableShellClass = "overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/60";
-export const labelClass = "flex flex-col gap-2 text-sm font-medium text-slate-700";
+export const workspacePageClass = "mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-4 pb-10 sm:px-6 xl:px-0";
+export const heroPanelClass = "relative overflow-hidden rounded-[32px] border border-slate-200/90 bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(248,250,252,0.98))] p-5 shadow-[0_32px_90px_-60px_rgba(15,23,42,0.4)] sm:p-6 lg:p-7";
+export const cardClass = "rounded-[28px] border border-slate-200/90 bg-white shadow-[0_24px_64px_-44px_rgba(15,23,42,0.34)]";
+export const subtlePanelClass = "rounded-2xl border border-slate-200/80 bg-slate-50/90 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]";
+export const tableShellClass = "overflow-hidden rounded-[26px] border border-slate-200/90 bg-white shadow-[0_20px_56px_-42px_rgba(15,23,42,0.32)]";
+export const filterBarClass = "grid grid-cols-1 gap-4 rounded-[24px] border border-slate-200/90 bg-slate-50/90 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] xl:p-5";
+export const tableHeaderCellClass = "px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500";
+export const tableBodyCellClass = "px-5 py-4 align-top text-sm text-slate-600";
+export const labelClass = "flex flex-col gap-2.5 text-sm font-medium text-slate-700";
 export const inputClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 shadow-sm shadow-slate-200/50 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100";
 export const textareaClass = "min-h-[132px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-sm shadow-slate-200/50 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100";
 export const primaryButtonClass = "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60";
-export const secondaryButtonClass = "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60";
+export const secondaryButtonClass = "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60";
 export const dangerButtonClass = "inline-flex h-11 items-center justify-center whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 shadow-sm transition hover:bg-rose-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-rose-100 disabled:cursor-not-allowed disabled:opacity-60";
 
 const metricToneMap: Record<NonNullable<MetricTileProps["tone"]>, string> = {
@@ -50,13 +53,13 @@ const pillToneMap: Record<NonNullable<StatusPillProps["tone"]>, string> = {
 
 export function WorkspaceSection({ eyebrow, title, description, actions, children }: WorkspaceSectionProps) {
   return (
-    <section className={`${cardClass} overflow-hidden p-5 sm:p-6`}>
-      <div className="flex flex-col gap-5">
-        <header className="flex flex-col gap-4 border-b border-slate-200/80 pb-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className={`${cardClass} overflow-hidden p-5 sm:p-6 lg:p-7`}>
+      <div className="flex flex-col gap-6">
+        <header className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             {eyebrow && <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">{eyebrow}</span>}
             <div className="space-y-1.5">
-              <h3 className="text-base font-semibold tracking-tight text-slate-950 sm:text-lg">{title}</h3>
+              <h3 className="text-base font-semibold tracking-tight text-slate-950 sm:text-[1.05rem]">{title}</h3>
               {description && <p className="max-w-3xl text-sm leading-6 text-slate-500">{description}</p>}
             </div>
           </div>
@@ -70,12 +73,12 @@ export function WorkspaceSection({ eyebrow, title, description, actions, childre
 
 export function MetricTile({ label, value, detail, tone = "slate" }: MetricTileProps) {
   return (
-    <article className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${metricToneMap[tone]}`}>
-      <span className="absolute inset-y-0 left-0 w-1 rounded-l-2xl bg-current/20" aria-hidden="true" />
-      <div className="relative space-y-2.5">
+    <article className={`relative overflow-hidden rounded-[24px] border p-5 shadow-sm shadow-slate-200/60 ${metricToneMap[tone]}`}>
+      <span className="absolute inset-x-0 top-0 h-px bg-white/70" aria-hidden="true" />
+      <div className="relative flex min-h-[128px] flex-col gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-        <strong className="block text-2xl font-semibold tracking-tight text-slate-950">{value}</strong>
-        <p className="text-sm leading-5 text-slate-500">{detail}</p>
+        <strong className="block text-[1.9rem] font-semibold tracking-tight text-slate-950">{value}</strong>
+        <p className="mt-auto text-sm leading-5 text-slate-500">{detail}</p>
       </div>
     </article>
   );
@@ -86,5 +89,5 @@ export function StatusPill({ children, tone = "slate" }: StatusPillProps) {
 }
 
 export function EmptyStatePanel({ children }: { children: ReactNode }) {
-  return <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-500">{children}</p>;
+  return <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 px-5 py-6 text-sm leading-6 text-slate-500">{children}</p>;
 }

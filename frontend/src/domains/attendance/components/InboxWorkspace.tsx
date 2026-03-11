@@ -284,15 +284,14 @@ export function InboxWorkspace({
   return (
     <section className={workspacePageClass}>
       <section className={heroPanelClass}>
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.95fr)]">
-          <div className="space-y-3">
+        <div className="grid gap-5 xl:grid-cols-12">
+          <div className="space-y-3 xl:col-span-7">
             <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">Atendimento</span>
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">Inbox interno para operar WhatsApp dentro do CRM</h2>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">Toda a operacao fica concentrada aqui: fila, conversa, atribuicao, respostas rapidas, notas internas e inicio de conversas outbound quando o canal Meta estiver pronto.</p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">Atendimento</h2>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
             <MetricTile label="Fila visivel" value={String(queue.length)} detail="Conversas filtradas na lista lateral" tone="blue" />
             <MetricTile label="Aguardando" value={String(waitingCount)} detail="Clientes pendentes de humano" tone="amber" />
             <MetricTile label="Em atendimento" value={String(humanCount)} detail="Conversas com operador ativo" tone="emerald" />
@@ -301,23 +300,20 @@ export function InboxWorkspace({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
+      <section className="grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)_350px] 2xl:grid-cols-[320px_minmax(0,1.05fr)_360px]">
         <WorkspaceSection
           eyebrow="Fila"
           title="Conversas ativas"
-          description="Busque, filtre e abra cada conversa sem sair da operacao principal."
-          actions={
-            <>
-              <button type="button" className={secondaryButtonClass} onClick={() => setShowOutboundComposer(true)}>
-                Nova conversa
-              </button>
-              <button type="button" className={secondaryButtonClass} onClick={() => void refreshInbox()}>
-                Atualizar fila
-              </button>
-            </>
-          }
         >
           <div className="grid gap-4">
+            <div className="flex flex-col gap-2">
+              <button type="button" className={`${secondaryButtonClass} w-full`} onClick={() => setShowOutboundComposer(true)}>
+                Nova conversa
+              </button>
+              <button type="button" className={`${secondaryButtonClass} w-full`} onClick={() => void refreshInbox()}>
+                Atualizar fila
+              </button>
+            </div>
             <div className="grid gap-3">
               <label className={labelClass} htmlFor="queue-search">
                 Buscar conversa
@@ -336,14 +332,14 @@ export function InboxWorkspace({
                     type="button"
                     className={queueFilter === filter.value ? primaryButtonClass : secondaryButtonClass}
                     onClick={() => setQueueFilter(filter.value)}
-                  >
+                   >
                     {filter.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-[calc(100vh-19rem)] space-y-3 overflow-y-auto pr-1">
               {queue.map((conversation) => {
                 const isActive = selectedConversationId === conversation.id;
                 return (
@@ -352,7 +348,7 @@ export function InboxWorkspace({
                     type="button"
                     onClick={() => onSelectConversation(conversation.id)}
                     className={`w-full rounded-2xl border p-4 text-left transition ${isActive ? "border-blue-300 bg-blue-50 shadow-sm shadow-blue-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"}`}
-                  >
+                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -378,11 +374,11 @@ export function InboxWorkspace({
 
         <WorkspaceSection
           eyebrow="Conversa"
-          title={selectedConversation ? `${selectedConversation.customerName} · ${selectedConversation.customerPhone}` : "Selecione uma conversa"}
-          description={selectedConversation ? "Visualize o historico completo, aplique respostas rapidas e responda como operador sem sair do CRM." : "Escolha um item da fila para abrir o historico e responder."}
+          title={selectedConversation ? `${selectedConversation.customerName} - ${selectedConversation.customerPhone}` : "Selecione uma conversa"}
         >
+
           {selectedConversation ? (
-            <div className="grid gap-5">
+            <div className="flex flex-col gap-5">
               <div className={`${subtlePanelClass} flex flex-wrap items-center gap-2`}>
                 <StatusPill tone={statusTone(selectedConversation.status)}>{statusLabel(selectedConversation.status)}</StatusPill>
                 {selectedConversation.channelName && <StatusPill tone="slate">Canal: {selectedConversation.channelName}</StatusPill>}
@@ -390,7 +386,7 @@ export function InboxWorkspace({
                 <span className="text-xs text-slate-500">Atualizada em {formatDate(selectedConversation.updatedAt)}</span>
               </div>
 
-              <div className="flex max-h-[560px] flex-col gap-3 overflow-y-auto rounded-[26px] border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex min-h-[360px] max-h-[calc(100vh-25rem)] flex-col gap-3 overflow-y-auto rounded-[26px] border border-slate-200 bg-slate-50/70 p-4">
                 {selectedConversation.messages.map((message) => (
                   <article key={message.id} className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${bubbleClasses(message.sender)}`}>
                     <div className="mb-1 flex items-center justify-between gap-3">
@@ -410,11 +406,11 @@ export function InboxWorkspace({
                       type="button"
                       className={secondaryButtonClass}
                       onClick={() => applyQuickReply(template.body)}
-                    >
+                     >
                       {template.title}
                     </button>
                   ))}
-                  {quickReplies.length === 0 && <span className="text-sm text-slate-500">Cadastre respostas rapidas para agilizar a operacao.</span>}
+                  {quickReplies.length === 0 && <span className="text-sm text-slate-500">Sem respostas rapidas.</span>}
                 </div>
 
                 <label className={labelClass} htmlFor="reply-text">
@@ -424,13 +420,11 @@ export function InboxWorkspace({
                     className={`${textareaClass} min-h-[150px]`}
                     value={reply}
                     onChange={(event) => setReply(event.target.value)}
-                    placeholder="Digite a resposta humana que sera enviada ao cliente."
-                  />
+                 />
                 </label>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-slate-500">Use respostas rapidas como base e personalize antes de enviar.</p>
-                  <div className="flex flex-wrap items-center gap-3">
+                 <div className="flex flex-wrap items-center gap-3">
                     <button type="button" className={secondaryButtonClass} onClick={() => setReply("")}>Limpar</button>
                     <button type="button" className={primaryButtonClass} onClick={() => void sendHumanReply()}>
                       Enviar resposta
@@ -448,7 +442,6 @@ export function InboxWorkspace({
           <WorkspaceSection
             eyebrow="Operacao"
             title="Responsavel e status"
-            description="Ajuste a conversa sem sobrepor campos: atribuicao e status agora ficam em um grid proprio, alinhado e legivel."
           >
             {selectedConversation ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
@@ -460,7 +453,7 @@ export function InboxWorkspace({
                     value={selectedConversation.assignedUserId ?? ""}
                     onChange={(event) => void assignConversation(event.target.value)}
                     disabled={!canAssignConversations}
-                  >
+                   >
                     <option value="">Fila sem responsavel</option>
                     {managedUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                   </select>
@@ -472,7 +465,7 @@ export function InboxWorkspace({
                     className={inputClass}
                     value={normalizeStatus(selectedConversation.status)}
                     onChange={(event) => void updateConversationStatus(event.target.value as "BotHandling" | "WaitingHuman" | "HumanHandling" | "Closed")}
-                  >
+                   >
                     <option value="BotHandling">IA atendendo</option>
                     <option value="WaitingHuman">Aguardando humano</option>
                     <option value="HumanHandling">Em atendimento</option>
@@ -488,7 +481,6 @@ export function InboxWorkspace({
           <WorkspaceSection
             eyebrow="Contato"
             title={hasSelectedContact ? "Atualizar contato da conversa" : "Criar contato a partir da conversa"}
-            description="Transforme rapidamente uma conversa em cadastro util para CRM, campanhas e distribuicao entre atendentes."
           >
             {selectedConversation ? (
               <div className="grid gap-4">
@@ -518,7 +510,7 @@ export function InboxWorkspace({
                       className={inputClass}
                       value={contactPanelDraft.state}
                       onChange={(event) => setContactPanelDraft((prev) => ({ ...prev, state: event.target.value }))}
-                    >
+                     >
                       <option value="">Selecionar</option>
                       {stateOptions.map((state) => <option key={state} value={state}>{state}</option>)}
                     </select>
@@ -530,7 +522,7 @@ export function InboxWorkspace({
                       className={inputClass}
                       value={contactPanelDraft.status}
                       onChange={(event) => setContactPanelDraft((prev) => ({ ...prev, status: event.target.value }))}
-                    >
+                     >
                       <option value="">Selecionar</option>
                       {contactStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
                     </select>
@@ -542,7 +534,7 @@ export function InboxWorkspace({
                       className={inputClass}
                       value={contactPanelDraft.ownerUserId}
                       onChange={(event) => setContactPanelDraft((prev) => ({ ...prev, ownerUserId: event.target.value }))}
-                    >
+                     >
                       <option value="">Sem responsavel</option>
                       {managedUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                     </select>
@@ -554,7 +546,7 @@ export function InboxWorkspace({
                       className={inputClass}
                       value={contactPanelDraft.tags}
                       onChange={(event) => setContactPanelDraft((prev) => ({ ...prev, tags: event.target.value }))}
-                      placeholder="vip, retorno, pos-venda"
+                     
                     />
                   </label>
                 </div>
@@ -572,7 +564,6 @@ export function InboxWorkspace({
           <WorkspaceSection
             eyebrow="Notas"
             title="Notas internas"
-            description="Registre contexto operacional sem expor nada para o cliente."
           >
             {selectedConversation ? (
               <div className="grid gap-4">
@@ -583,7 +574,7 @@ export function InboxWorkspace({
                     className={`${textareaClass} min-h-[130px]`}
                     value={noteDraft}
                     onChange={(event) => setNoteDraft(event.target.value)}
-                    placeholder="Ex.: cliente pediu retorno apos 18h e prefere falar com o setor financeiro."
+                   
                   />
                 </label>
                 <div className="flex justify-end">
@@ -612,7 +603,6 @@ export function InboxWorkspace({
           <WorkspaceSection
             eyebrow="Qualidade"
             title="Avaliacao do atendimento"
-            description="Guarde a nota final do cliente para medir qualidade e fechar o ciclo da conversa."
           >
             {selectedConversation ? (
               <div className="grid gap-4">
@@ -623,7 +613,7 @@ export function InboxWorkspace({
                     className={inputClass}
                     value={String(feedbackDraft.rating)}
                     onChange={(event) => setFeedbackDraft((prev) => ({ ...prev, rating: Number(event.target.value) || 5 }))}
-                  >
+                   >
                     {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} estrela{rating > 1 ? "s" : ""}</option>)}
                   </select>
                 </label>
@@ -634,7 +624,7 @@ export function InboxWorkspace({
                     className={`${textareaClass} min-h-[130px]`}
                     value={feedbackDraft.comment}
                     onChange={(event) => setFeedbackDraft((prev) => ({ ...prev, comment: event.target.value }))}
-                    placeholder="Resumo da experiencia do cliente ou observacoes relevantes."
+                   
                   />
                 </label>
                 <div className="flex justify-end">
@@ -650,11 +640,10 @@ export function InboxWorkspace({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_360px]">
+      <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.18fr)_340px]">
         <WorkspaceSection
           eyebrow="Produtividade"
           title="Respostas rapidas"
-          description="Crie modelos reutilizaveis por tenant e aplique no composer com um clique."
         >
           <div className="grid gap-3">
             {quickReplies.map((template) => (
@@ -686,7 +675,6 @@ export function InboxWorkspace({
         <WorkspaceSection
           eyebrow="Editor"
           title={quickReplyDraft.id ? "Editar resposta rapida" : "Nova resposta rapida"}
-          description="Organize atalhos que o time usa com frequencia para manter consistencia no atendimento."
         >
           <div className="grid gap-4">
             <label className={labelClass} htmlFor="quick-reply-title">
@@ -696,7 +684,7 @@ export function InboxWorkspace({
                 className={inputClass}
                 value={quickReplyDraft.title}
                 onChange={(event) => setQuickReplyDraft((prev) => ({ ...prev, title: event.target.value }))}
-                placeholder="Ex.: Confirmacao de agendamento"
+               
               />
             </label>
             <label className={labelClass} htmlFor="quick-reply-body">
@@ -706,7 +694,7 @@ export function InboxWorkspace({
                 className={`${textareaClass} min-h-[180px]`}
                 value={quickReplyDraft.body}
                 onChange={(event) => setQuickReplyDraft((prev) => ({ ...prev, body: event.target.value }))}
-                placeholder="Mensagem base usada pelo time operacional."
+               
               />
             </label>
             <div className="flex flex-wrap items-center justify-end gap-3">
@@ -715,7 +703,7 @@ export function InboxWorkspace({
                   type="button"
                   className={secondaryButtonClass}
                   onClick={() => setQuickReplyDraft({ id: "", title: "", body: "" })}
-                >
+                 >
                   Cancelar edicao
                 </button>
               )}
@@ -734,8 +722,7 @@ export function InboxWorkspace({
               <div className="space-y-2">
                 <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">Outbound</span>
                 <h3 className="text-xl font-semibold tracking-tight text-slate-950">Iniciar nova conversa pelo CRM</h3>
-                <p className="text-sm leading-6 text-slate-500">Escolha o contato, opcionalmente o canal, e envie a primeira mensagem. Se a Meta bloquear por politica de janela ou template, o CRM vai mostrar esse retorno na propria conversa.</p>
-              </div>
+                             </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className={labelClass} htmlFor="outbound-customer-name">
@@ -745,7 +732,7 @@ export function InboxWorkspace({
                     className={inputClass}
                     value={outboundDraft.customerName}
                     onChange={(event) => setOutboundDraft((prev) => ({ ...prev, customerName: event.target.value }))}
-                    placeholder="Ex.: Jose Silva"
+                   
                   />
                 </label>
                 <label className={labelClass} htmlFor="outbound-customer-phone">
@@ -765,7 +752,7 @@ export function InboxWorkspace({
                     className={inputClass}
                     value={outboundDraft.channelId}
                     onChange={(event) => setOutboundDraft((prev) => ({ ...prev, channelId: event.target.value }))}
-                  >
+                   >
                     <option value="">Usar canal principal automatico</option>
                     {activeChannels.map((channel) => (
                       <option key={channel.id} value={channel.id}>
@@ -781,13 +768,13 @@ export function InboxWorkspace({
                     className={`${textareaClass} min-h-[190px]`}
                     value={outboundDraft.message}
                     onChange={(event) => setOutboundDraft((prev) => ({ ...prev, message: event.target.value }))}
-                    placeholder="Escreva a mensagem que o CRM vai enviar pelo canal selecionado."
+                   
                   />
                 </label>
               </div>
 
               <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm leading-6 text-blue-900">
-                Dica operacional: para iniciar conversa outbound em WhatsApp Cloud API, a Meta pode exigir janela ativa de 24h ou template aprovado. Se houver bloqueio, a conversa ainda fica registrada no CRM com o motivo da falha.
+                A Meta pode exigir janela ativa de 24h ou template aprovado.
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-3">
@@ -805,3 +792,7 @@ export function InboxWorkspace({
     </section>
   );
 }
+
+
+
+

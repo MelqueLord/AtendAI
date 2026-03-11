@@ -23,3 +23,11 @@ backend/appsettings.Development.json
 
 .history/
 
+backend/build-verify/
+**/bin/
+**/obj/
+appsettings.Development.json
+.env
+.env.*
+
+

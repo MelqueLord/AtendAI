@@ -14,6 +14,9 @@ public sealed class AiResponderService(IDataStore store, IChatCompletionService 
     {
         var settings = await store.GetSettingsAsync(tenantId, cancellationToken);
         var automationOptions = await store.GetAutomationOptionsAsync(tenantId, cancellationToken);
+        var businessName = ResolveBusinessName(settings);
+        var welcomeMessage = ResolveWelcomeMessage(settings);
+        var humanFallbackMessage = ResolveHumanFallback(settings);
 
         var configuredOption = automationOptions
             .Where(option => option.IsActive)
@@ -22,12 +25,12 @@ public sealed class AiResponderService(IDataStore store, IChatCompletionService 
 
         if (configuredOption is not null)
         {
-            return (ApplyTemplate(configuredOption.ResponseTemplate, conversation.CustomerName, settings.BusinessName), configuredOption.EscalateToHuman);
+            return (ApplyTemplate(configuredOption.ResponseTemplate, conversation.CustomerName, businessName), configuredOption.EscalateToHuman);
         }
 
         if (IsComplex(message))
         {
-            return (settings.HumanFallbackMessage, true);
+            return (humanFallbackMessage, true);
         }
 
         var lowerText = message.ToLowerInvariant();
@@ -36,7 +39,7 @@ public sealed class AiResponderService(IDataStore store, IChatCompletionService 
 
         if (customAnswer is not null)
         {
-            return (ApplyTemplate(customAnswer.AnswerTemplate, conversation.CustomerName, settings.BusinessName), false);
+            return (ApplyTemplate(customAnswer.AnswerTemplate, conversation.CustomerName, businessName), false);
         }
 
         var trainingRules = settings.TrainingEntries
@@ -49,7 +52,7 @@ public sealed class AiResponderService(IDataStore store, IChatCompletionService 
             .ToList();
 
         var groqReply = await groqChatService.GenerateReplyAsync(
-            settings.BusinessName,
+            businessName,
             conversation.CustomerName,
             message,
             [.. trainingRules, .. optionRules],
@@ -62,15 +65,34 @@ public sealed class AiResponderService(IDataStore store, IChatCompletionService 
 
         if (lowerText.Contains("agendar") || lowerText.Contains("consulta") || lowerText.Contains("horario"))
         {
-            return ($"{conversation.CustomerName}, posso te ajudar com agendamento. Me passe o melhor dia e horario para {settings.BusinessName}.", false);
+            return ($"{conversation.CustomerName}, posso te ajudar com agendamento. Me passe o melhor dia e horario para {businessName}.", false);
         }
 
         if (lowerText.Contains("valor") || lowerText.Contains("preco") || lowerText.Contains("orcamento"))
         {
-            return ($"Consigo verificar valores para voce. Me diga qual servico deseja em {settings.BusinessName}.", false);
+            return ($"Consigo verificar valores para voce. Me diga qual servico deseja em {businessName}.", false);
         }
 
-        return (ApplyTemplate(settings.WelcomeMessage, conversation.CustomerName, settings.BusinessName), false);
+        return (ApplyTemplate(welcomeMessage, conversation.CustomerName, businessName), false);
+    }
+
+    private static string ResolveBusinessName(BusinessSettings settings)
+    {
+        return string.IsNullOrWhiteSpace(settings.BusinessName) ? "nosso atendimento" : settings.BusinessName;
+    }
+
+    private static string ResolveWelcomeMessage(BusinessSettings settings)
+    {
+        return string.IsNullOrWhiteSpace(settings.WelcomeMessage)
+            ? "Oi, {cliente}. Sou o assistente virtual da {negocio}. Como posso ajudar?"
+            : settings.WelcomeMessage;
+    }
+
+    private static string ResolveHumanFallback(BusinessSettings settings)
+    {
+        return string.IsNullOrWhiteSpace(settings.HumanFallbackMessage)
+            ? "Sua solicitacao precisa de um atendente humano. Vou encaminhar agora."
+            : settings.HumanFallbackMessage;
     }
 
     private static bool IsComplex(string message)

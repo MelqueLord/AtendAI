@@ -351,23 +351,13 @@ public sealed partial class SupabaseDataStore : IDataStore
         if (settings is null)
         {
             var tenant = await GetTenantByIdAsync(tenantId, cancellationToken);
-            var businessName = tenant?.Name ?? $"Negocio {tenantId.ToString()[..8]}";
-
-            await PostAsync("tenant_settings", new[]
+            return new BusinessSettings
             {
-                new
-                {
-                    tenant_id = tenantId,
-                    business_name = businessName,
-                    welcome_message = "Oi, {cliente}. Sou o assistente virtual da {negocio}. Posso ajudar com informacoes e agendamentos.",
-                    human_fallback_message = "Sua pergunta precisa de um especialista. Encaminhei para nossa equipe humana agora."
-                }
-            }, cancellationToken);
-
-            settingsRows = await GetAsync<List<SettingsRow>>(
-                $"tenant_settings?tenant_id=eq.{tenantId}&select=*&limit=1",
-                cancellationToken);
-            settings = settingsRows.First();
+                BusinessName = tenant?.Name ?? string.Empty,
+                WelcomeMessage = string.Empty,
+                HumanFallbackMessage = string.Empty,
+                TrainingEntries = await GetTrainingEntriesAsync(tenantId, cancellationToken)
+            };
         }
 
         var training = await GetTrainingEntriesAsync(tenantId, cancellationToken);
@@ -380,7 +370,6 @@ public sealed partial class SupabaseDataStore : IDataStore
             TrainingEntries = training
         };
     }
-
     public Task<List<TrainingEntry>> GetTrainingEntriesAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         return GetTrainingInternalAsync(tenantId, cancellationToken);
@@ -388,6 +377,26 @@ public sealed partial class SupabaseDataStore : IDataStore
 
     public async Task UpdateSettingsAsync(Guid tenantId, UpdateSettingsRequest request, CancellationToken cancellationToken = default)
     {
+        var rows = await GetAsync<List<SettingsRow>>(
+            $"tenant_settings?tenant_id=eq.{tenantId}&select=tenant_id&limit=1",
+            cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            await PostAsync("tenant_settings", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    business_name = request.BusinessName,
+                    welcome_message = request.WelcomeMessage,
+                    human_fallback_message = request.HumanFallbackMessage,
+                    updated_at = DateTimeOffset.UtcNow
+                }
+            }, cancellationToken);
+            return;
+        }
+
         await PatchAsync($"tenant_settings?tenant_id=eq.{tenantId}", new
         {
             business_name = request.BusinessName,
@@ -396,7 +405,6 @@ public sealed partial class SupabaseDataStore : IDataStore
             updated_at = DateTimeOffset.UtcNow
         }, cancellationToken);
     }
-
     public async Task AddTrainingEntryAsync(Guid tenantId, AddTrainingRequest request, CancellationToken cancellationToken = default)
     {
         await PostAsync("training_entries", new[]

@@ -45,8 +45,8 @@ const SESSION_REFRESH_SKEW_MS = 60_000;
 export function App() {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [email, setEmail] = useState("admin@autoprime.com");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -182,6 +182,7 @@ export function App() {
 
   const canManage = auth?.role === "Admin" || auth?.role === "SuperAdmin";
   const canManageCompanies = auth?.role === "SuperAdmin";
+  const workspaceName = settings?.businessName?.trim() || auth?.tenantName || "Workspace";
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId),
@@ -216,7 +217,8 @@ export function App() {
 
     void loadConversationNotes(selectedConversation.id);
   }, [managedUsers, selectedContact, selectedConversation]);
-const queue = useMemo(() => {
+
+  const queue = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return conversations.filter((conversation) => {
@@ -1838,11 +1840,11 @@ const queue = useMemo(() => {
           <article className="authHero">
             <span className="brandPill">RESTAURANDO SESSAO</span>
             <h1>Atend.AI</h1>
-            <p>Estamos validando sua sessao para reabrir o CRM no ponto em que voce parou.</p>
+            <p>Verificando sua sessao.</p>
           </article>
           <article className="authCard">
             <h2>Carregando</h2>
-            <p>Mais alguns segundos e a plataforma decide se reabre sua sessao ou mostra o login.</p>
+            <p>Aguarde alguns segundos.</p>
           </article>
         </section>
       </main>
@@ -1885,72 +1887,34 @@ const queue = useMemo(() => {
   }
 
   return (
-    <main className="appRoot bg-slate-50">
-      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
-        <header className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/90 px-5 py-5 shadow-sm shadow-slate-200/70 backdrop-blur sm:px-6 lg:px-7">
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-64 bg-gradient-to-l from-blue-50/80 via-blue-50/30 to-transparent" aria-hidden="true" />
-          <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="space-y-3">
-              <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">
-                Workspace ativo
-              </span>
-              <div className="space-y-2">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">{pageMeta[currentPage].title}</h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600">{pageMeta[currentPage].description}</p>
+    <main className="appRoot min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)]">
+      <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-4 sm:px-6 lg:px-8">
+        <section className="grid items-start gap-6 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[296px_minmax(0,1fr)]">
+          <aside className="sticky top-4 flex flex-col gap-5 rounded-[32px] border border-slate-200/90 bg-white/95 p-5 shadow-[0_30px_80px_-58px_rgba(15,23,42,0.45)] backdrop-blur">
+            <div className="overflow-hidden rounded-[26px] border border-slate-200/90 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.96))] p-5 text-white shadow-sm shadow-slate-900/20">
+              <div className="space-y-3">
+                <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">
+                  Atend.AI
+                </span>
+                <div className="space-y-1.5">
+                  <p className="text-lg font-semibold tracking-tight text-white">{workspaceName}</p>
+                  <p className="text-sm leading-6 text-slate-300">{auth.tenantName}</p>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
-              <div className="flex min-h-12 items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm shadow-slate-300/40">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold uppercase">
+            <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold uppercase text-white shadow-sm shadow-slate-300/50">
                   {auth.name.slice(0, 1)}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{auth.name}</p>
-                  <p className="truncate text-xs text-slate-300">{auth.role} - {auth.tenantName}</p>
+                  <p className="truncate text-sm font-semibold text-slate-950">{auth.name}</p>
+                  <p className="truncate text-xs text-slate-500">{auth.role} � {auth.tenantName}</p>
                 </div>
               </div>
-
-              {auth.role === "SuperAdmin" && (
-                <label className="flex min-h-12 min-w-[280px] flex-col justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Tenant ativo</span>
-                  <select
-                    className="mt-1 h-7 border-0 bg-transparent px-0 text-sm font-medium text-slate-700 outline-none focus:ring-0"
-                    value={auth.tenantId}
-                    onChange={(event) => switchTenant(event.target.value)}
-                    disabled={switchingTenant}
-                  >
-                    {tenants.map((tenant) => (
-                      <option key={tenant.id} value={tenant.id}>
-                        {tenant.name} ({tenant.segment})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-100"
-                  onClick={() => refreshAll()}
-                >
-                  Atualizar tudo
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 shadow-sm transition hover:bg-rose-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-rose-100"
-                  onClick={() => { void logout(); }}
-                >
-                  Sair
-                </button>
-              </div>
             </div>
-          </div>
-        </header>
 
-        <section className="grid items-start gap-4 xl:grid-cols-[248px_minmax(0,1fr)]">
-          <aside className="sticky top-0 flex flex-col gap-5 rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-sm shadow-slate-200/60">
             <div className="sidebarGroup">
               <span className="sidebarGroupLabel">Operacao</span>
               <SidebarNavButton active={currentPage === "ATTENDANCE"} label="Atendimento" onClick={() => setCurrentPage("ATTENDANCE")} />
@@ -1972,13 +1936,67 @@ const queue = useMemo(() => {
               </>
             )}
           </aside>
-          <section className="grid min-w-0 gap-4">
-            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+          <section className="min-w-0 space-y-6">
+            <header className="relative overflow-hidden rounded-[32px] border border-slate-200/90 bg-white/95 px-5 py-5 shadow-[0_32px_90px_-60px_rgba(15,23,42,0.4)] backdrop-blur sm:px-6 lg:px-7">
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-blue-100/70 via-blue-50/35 to-transparent" aria-hidden="true" />
+              <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                <div className="space-y-3">
+                  <span className="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">
+                    Workspace ativo
+                  </span>
+                  <div className="space-y-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">{pageMeta[currentPage].title}</h1>
+                    {pageMeta[currentPage].description && <p className="max-w-3xl text-sm leading-6 text-slate-600">{pageMeta[currentPage].description}</p>}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
+                  {auth.role === "SuperAdmin" && (
+                    <label className="flex min-h-12 min-w-[290px] flex-col justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm shadow-slate-200/60">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Tenant ativo</span>
+                      <select
+                        className="mt-1 h-7 border-0 bg-transparent px-0 text-sm font-medium text-slate-700 outline-none focus:ring-0"
+                        value={auth.tenantId}
+                        onChange={(event) => switchTenant(event.target.value)}
+                        disabled={switchingTenant}
+                      >
+                        {tenants.map((tenant) => (
+                          <option key={tenant.id} value={tenant.id}>
+                            {tenant.name} ({tenant.segment})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm shadow-slate-200/60 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-100"
+                      onClick={() => refreshAll()}
+                    >
+                      Atualizar tudo
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 shadow-sm transition hover:bg-rose-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-rose-100"
+                      onClick={() => { void logout(); }}
+                    >
+                      Sair
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
               <MetricCard label="SLA <= 5 min" value={`${analytics?.slaWithinFiveMinutesRate ?? 0}%`} detail="Primeira resposta no prazo" tone="success" />
               <MetricCard label="FCR" value={`${analytics?.firstContactResolutionRate ?? 0}%`} detail="Resolvidas sem humano" tone="neutral" />
               <MetricCard label="Tempo 1a resposta" value={formatSeconds(analytics?.averageFirstResponseSeconds ?? 0)} detail="Media de atendimento" tone="alert" />
               <MetricCard label="Conversao" value={`${analytics?.schedulingConversionRate ?? 0}%`} detail="Intencao de agendamento" tone="success" />
             </section>
+
 
       {currentPage === "ATTENDANCE" && (
         <InboxWorkspace
@@ -2176,14 +2194,14 @@ type MetricCardProps = {
 function MetricCard({ label, value, detail, tone }: MetricCardProps) {
   const toneMap = {
     neutral: "border-slate-200 bg-white text-slate-700 shadow-slate-200/70",
-    success: "border-emerald-200 bg-emerald-50/80 text-emerald-800 shadow-emerald-100",
-    alert: "border-amber-200 bg-amber-50/80 text-amber-800 shadow-amber-100"
+    success: "border-emerald-200 bg-emerald-50/75 text-emerald-800 shadow-emerald-100",
+    alert: "border-amber-200 bg-amber-50/75 text-amber-800 shadow-amber-100"
   } satisfies Record<MetricCardProps["tone"], string>;
 
   return (
-    <article className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm ${toneMap[tone]}`}>
-      <span className="absolute inset-y-0 left-0 w-1 rounded-l-2xl bg-current/20" aria-hidden="true" />
-      <div className="relative flex min-h-[124px] flex-col gap-3">
+    <article className={`relative overflow-hidden rounded-[24px] border p-5 shadow-sm ${toneMap[tone]}`}>
+      <span className="absolute inset-x-0 top-0 h-px bg-white/70" aria-hidden="true" />
+      <div className="relative flex min-h-[132px] flex-col gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</span>
         <strong className="text-[2rem] font-semibold leading-none tracking-tight text-slate-950">{value}</strong>
         <small className="mt-auto text-sm leading-5 text-slate-500">{detail}</small>
@@ -2191,7 +2209,6 @@ function MetricCard({ label, value, detail, tone }: MetricCardProps) {
     </article>
   );
 }
-
 type FilterChipProps = {
   active: boolean;
   label: string;
@@ -2212,18 +2229,22 @@ function SidebarNavButton({ active, label, onClick }: SidebarNavButtonProps) {
   return (
     <button
       type="button"
-      className={`flex min-h-11 w-full items-center rounded-xl border px-3.5 py-3 text-left text-sm font-semibold transition focus:outline-none focus-visible:ring-4 ${
+      className={`group flex min-h-[52px] w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left text-sm font-semibold transition focus:outline-none focus-visible:ring-4 ${
         active
           ? "border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-200 focus-visible:ring-blue-100"
           : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-slate-300 hover:bg-white focus-visible:ring-slate-100"
       }`}
       onClick={onClick}
     >
-      {label}
+      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold uppercase transition ${
+        active ? "bg-white/15 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 group-hover:bg-slate-100"
+      }`}>
+        {label.slice(0, 1)}
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
     </button>
   );
 }
-
 type StatusBadgeProps = { status: "BotHandling" | "WaitingHuman" | "HumanHandling" | "Closed"; };
 
 function StatusBadge({ status }: StatusBadgeProps) {
@@ -2453,8 +2474,3 @@ function isPageAllowedForRole(page: AppPage, role?: string) {
 function isAppPage(value: string | null): value is AppPage {
   return value === "ATTENDANCE" || value === "AI" || value === "CRM" || value === "WHATSAPP" || value === "COMMERCIAL" || value === "USERS" || value === "COMPANIES";
 }
-
-
-
-
-

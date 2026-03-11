@@ -23,7 +23,7 @@ export const campaignDelayOptions = [
 
 export const automationPriorityOptions = [1, 2, 3, 4, 5];
 
-export const pageMeta: Record<AppPage, { title: string; description: string }> = {
+export const pageMeta: Record<AppPage, { title: string; description?: string }> = {
   ATTENDANCE: {
     title: "Atendimento",
     description: "Acompanhe a fila, assuma conversas e responda clientes em tempo real."
