@@ -1,0 +1,8 @@
+﻿version: "2"
+authtoken: "COLE_SEU_NGROK_AUTHTOKEN"
+tunnels:
+  atend-ai-api:
+    proto: http
+    addr: 5155
+    schemes:
+      - https

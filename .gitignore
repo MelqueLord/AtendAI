@@ -1,0 +1,25 @@
+﻿# .NET
+bin/
+obj/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+backend/appsettings.json
+backend/appsettings.Development.json
+
+
+.history/
+
