@@ -284,7 +284,12 @@ INSERT INTO public.users (tenant_id, name, email, password_hash, role) VALUES
   ('22222222-2222-2222-2222-222222222222', 'Admin Studio Zen', 'admin@studiozen.com', 'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', 'Admin'),
   ('22222222-2222-2222-2222-222222222222', 'Atendente Studio Zen', 'suporte@studiozen.com', 'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', 'Agent'),
   ('11111111-1111-1111-1111-111111111111', 'Super Admin', 'superadmin@atend.ai', 'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', 'SuperAdmin')
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE SET
+  tenant_id = excluded.tenant_id,
+  name = excluded.name,
+  password_hash = excluded.password_hash,
+  role = excluded.role,
+  deleted_at = null;
 
 INSERT INTO public.billing_plans (code, name, monthly_price, currency, included_conversations, included_agents, included_whatsapp_numbers, is_popular, active) VALUES
   ('TRIAL', 'Trial 14 dias', 0, 'BRL', 200, 2, 1, false, true),

@@ -183,6 +183,7 @@ export function App() {
   const canManage = auth?.role === "Admin" || auth?.role === "SuperAdmin";
   const canManageCompanies = auth?.role === "SuperAdmin";
   const workspaceName = settings?.businessName?.trim() || auth?.tenantName || "Workspace";
+  const workspacePlanName = billingSubscription?.planName?.trim() || "Sem plano contratado";
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId),
@@ -783,8 +784,11 @@ export function App() {
       }
 
       setBillingSubscription((await res.json()) as BillingSubscription);
-      await loadCommercial(auth.token, auth.role);
-      setNotice("Plano atualizado com sucesso.");
+      await Promise.all([
+        loadCommercial(auth.token, auth.role),
+        loadEngagement(auth.token, auth.role)
+      ]);
+      setNotice("Plano atualizado com sucesso e limites de WhatsApp atualizados.");
     } catch {
       setError("Erro ao atualizar plano.");
     }
@@ -1021,8 +1025,46 @@ export function App() {
     }
   }
 
-  function openMetaWhatsAppChannel() {
+  function openInternalConversation(contact?: Contact) {
+    setSearch("");
+    setQueueFilter("ALL");
+    setReply("");
+
+    if (!contact) {
+      setCurrentPage("ATTENDANCE");
+      setNotice("Central de atendimento interna aberta.");
+      return;
+    }
+
+    const matchedConversation = conversations.find(
+      (conversation) => normalizePhone(conversation.customerPhone) === normalizePhone(contact.phone)
+    );
+
+    if (matchedConversation) {
+      setSelectedId(matchedConversation.id);
+      setCurrentPage("ATTENDANCE");
+      setNotice(`Abrindo atendimento interno de ${contact.name}.`);
+      return;
+    }
+
+    const defaultChannelId =
+      whatsAppChannels.find((channel) => channel.isActive && channel.isPrimary)?.id ??
+      whatsAppChannels.find((channel) => channel.isActive)?.id ??
+      "";
+
+    setSelectedId("");
+    setOutboundDraft({
+      customerName: contact.name,
+      customerPhone: contact.phone,
+      channelId: defaultChannelId,
+      message: ""
+    });
     setCurrentPage("ATTENDANCE");
+    setNotice(`Contato ${contact.name} ainda nao tem conversa. Preenchemos o envio inicial dentro da plataforma.`);
+  }
+
+  function openMetaWhatsAppChannel() {
+    openInternalConversation();
     setNotice("Canal WhatsApp via API da Meta aberto dentro da plataforma.");
   }
 
@@ -1898,7 +1940,7 @@ export function App() {
                 </span>
                 <div className="space-y-1.5">
                   <p className="text-lg font-semibold tracking-tight text-white">{workspaceName}</p>
-                  <p className="text-sm leading-6 text-slate-300">{auth.tenantName}</p>
+                  <p className="text-sm leading-6 text-slate-300">{workspacePlanName}</p>
                 </div>
               </div>
             </div>
@@ -2092,6 +2134,14 @@ export function App() {
           subscribePlan={subscribePlan}
           formatCurrency={formatCurrency}
           formatDate={formatDate}
+          currentTenantId={auth.tenantId}
+          currentTenantName={auth.tenantName}
+          canSwitchTenant={auth.role === "SuperAdmin"}
+          tenants={tenants}
+          switchTenant={switchTenant}
+          switchingTenant={switchingTenant}
+          whatsAppChannelLimit={whatsAppChannelLimit}
+          whatsAppChannelCount={whatsAppChannels.length}
         />
       )}
 
@@ -2152,6 +2202,7 @@ export function App() {
           cancelAutomationEdit={cancelAutomationEdit}
           editAutomationOption={editAutomationOption}
           deleteAutomationOption={deleteAutomationOption}
+          openInternalConversation={openInternalConversation}
           formatDate={formatDate}
         />
       )}

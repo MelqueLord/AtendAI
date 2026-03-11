@@ -34,6 +34,23 @@ export const WHATSAPP_WEB_URL = "https://web.whatsapp.com/";
 const WHATSAPP_WEB_WINDOW_NAME = "atendai-whatsapp-web";
 const WHATSAPP_WEB_POPUP_FEATURES = "popup=yes,width=1360,height=900,left=80,top=40,resizable=yes,scrollbars=yes";
 
+export function normalizeWhatsAppPhone(value: string) {
+  return value.replace(/\D+/g, "");
+}
+
+export function buildWhatsAppWebUrl(phone?: string, text?: string) {
+  const normalizedPhone = phone ? normalizeWhatsAppPhone(phone) : "";
+  if (!normalizedPhone) {
+    return WHATSAPP_WEB_URL;
+  }
+
+  const params = new URLSearchParams({ phone: normalizedPhone });
+  if (text?.trim()) {
+    params.set("text", text.trim());
+  }
+
+  return `https://web.whatsapp.com/send?${params.toString()}`;
+}
 export function resolveMetaIntegrationAvailability(
   config: MetaConnectionStatus | null,
   channels: MetaChannelStatus[]
@@ -176,5 +193,4 @@ export function openPopupWindow(url: string, targetWindow?: Window | null) {
     return null;
   }
 }
-
 

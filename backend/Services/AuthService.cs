@@ -16,27 +16,33 @@ public sealed class AuthService(IConfiguration configuration, IDataStore store) 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
+
+        var user = await store.FindUserByEmailAsync(email, cancellationToken);
+        if (user is null)
+        {
+            if (IsLocked(email))
+            {
+                return null;
+            }
+
+            RegisterFailedLogin(email);
+            return null;
+        }
+
+        var hash = HashPassword(request.Password.Trim());
+        if (string.Equals(hash, user.PasswordHash, StringComparison.OrdinalIgnoreCase))
+        {
+            FailedLogins.TryRemove(email, out _);
+            return await BuildAuthResponseAsync(user.Id, user.Email, user.Name, user.Role, user.TenantId, user.TenantName, cancellationToken);
+        }
+
         if (IsLocked(email))
         {
             return null;
         }
 
-        var user = await store.FindUserByEmailAsync(email, cancellationToken);
-        if (user is null)
-        {
-            RegisterFailedLogin(email);
-            return null;
-        }
-
-        var hash = HashPassword(request.Password);
-        if (!string.Equals(hash, user.PasswordHash, StringComparison.OrdinalIgnoreCase))
-        {
-            RegisterFailedLogin(email);
-            return null;
-        }
-
-        FailedLogins.TryRemove(email, out _);
-        return await BuildAuthResponseAsync(user.Id, user.Email, user.Name, user.Role, user.TenantId, user.TenantName, cancellationToken);
+        RegisterFailedLogin(email);
+        return null;
     }
 
     public async Task<AuthResponse?> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)

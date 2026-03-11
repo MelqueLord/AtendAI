@@ -15,7 +15,7 @@ select
   'Sua solicitacao precisa de um atendente humano. Vou encaminhar agora.' as human_fallback_message,
   now()
 from public.tenants t
-on conflict (tenant_id) do update
+on conflict (tenant_id) do updatecls
 set
   business_name = case
     when nullif(trim(public.tenant_settings.business_name), '') is null then excluded.business_name

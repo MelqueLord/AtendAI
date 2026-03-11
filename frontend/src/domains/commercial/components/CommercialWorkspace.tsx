@@ -4,6 +4,7 @@ import {
   StatusPill,
   WorkspaceSection,
   heroPanelClass,
+  inputClass,
   primaryButtonClass,
   secondaryButtonClass,
   subtlePanelClass,
@@ -39,6 +40,12 @@ type ValueMetrics = {
   estimatedRevenueProtected: number;
 };
 
+type TenantOption = {
+  id: string;
+  name: string;
+  segment: string;
+};
+
 type CommercialWorkspaceProps = {
   billingSubscription: BillingSubscription | null;
   valueMetrics: ValueMetrics | null;
@@ -46,6 +53,14 @@ type CommercialWorkspaceProps = {
   subscribePlan: (planCode: string) => void;
   formatCurrency: (value: number, currency: string) => string;
   formatDate: (value: string) => string;
+  currentTenantId: string;
+  currentTenantName: string;
+  canSwitchTenant: boolean;
+  tenants: TenantOption[];
+  switchTenant: (tenantId: string) => Promise<void>;
+  switchingTenant: boolean;
+  whatsAppChannelLimit: number;
+  whatsAppChannelCount: number;
 };
 
 export function CommercialWorkspace({
@@ -54,9 +69,19 @@ export function CommercialWorkspace({
   billingPlans,
   subscribePlan,
   formatCurrency,
-  formatDate
+  formatDate,
+  currentTenantId,
+  currentTenantName,
+  canSwitchTenant,
+  tenants,
+  switchTenant,
+  switchingTenant,
+  whatsAppChannelLimit,
+  whatsAppChannelCount
 }: CommercialWorkspaceProps) {
   const currentPlan = billingPlans.find((plan) => plan.code === billingSubscription?.planCode) ?? null;
+  const remainingWhatsAppSlots = Math.max(0, whatsAppChannelLimit - whatsAppChannelCount);
+  const exceedsWhatsAppLimit = whatsAppChannelLimit > 0 && whatsAppChannelCount > whatsAppChannelLimit;
 
   return (
     <section className={workspacePageClass}>
@@ -66,12 +91,17 @@ export function CommercialWorkspace({
             <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">Comercial</span>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">Comercial</h2>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600">O plano selecionado para a empresa define capacidade comercial e tambem quantos numeros de WhatsApp podem ser cadastrados na operacao.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusPill tone="blue">Empresa ativa: {currentTenantName || "Empresa"}</StatusPill>
+              {canSwitchTenant && <StatusPill tone="slate">SuperAdmin</StatusPill>}
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
             <MetricTile label="Plano atual" value={billingSubscription?.planName ?? "-"} detail={billingSubscription?.status ?? "Sem assinatura"} tone="blue" />
             <MetricTile label="Conversas 30d" value={String(valueMetrics?.conversations30d ?? 0)} detail="Volume recente da operacao" tone="emerald" />
-            <MetricTile label="Automacao" value={`${valueMetrics?.automationRate ?? 0}%`} detail="Atendimentos resolvidos sem humano" tone="slate" />
+            <MetricTile label="WhatsApps" value={`${whatsAppChannelCount}/${whatsAppChannelLimit || 0}`} detail="Numeros cadastrados versus limite do plano" tone={exceedsWhatsAppLimit ? "amber" : "slate"} />
             <MetricTile label="Receita protegida" value={formatCurrency(valueMetrics?.estimatedRevenueProtected ?? 0, currentPlan?.currency ?? "BRL")} detail="Estimativa de valor preservado pela automacao" tone="amber" />
           </div>
         </div>
@@ -82,14 +112,35 @@ export function CommercialWorkspace({
           <WorkspaceSection
             eyebrow="Assinatura"
             title="Resumo da conta"
-           actions={billingSubscription ? <StatusPill tone="blue">{billingSubscription.status}</StatusPill> : undefined}
+            actions={billingSubscription ? <StatusPill tone="blue">{billingSubscription.status}</StatusPill> : undefined}
           >
             <div className="grid gap-4 lg:grid-cols-12">
-              <div className={`${subtlePanelClass} lg:col-span-7`}>
-                <p className="text-sm font-semibold text-slate-900">Plano contratado</p>
-                <strong className="mt-3 block text-3xl font-semibold tracking-tight text-slate-950">{billingSubscription?.planName ?? "Sem plano"}</strong>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{billingSubscription ? `Ultima atualizacao em ${formatDate(billingSubscription.updatedAt)}.` : "Defina um plano para liberar recursos e limites operacionais."}</p>
+              <div className={`${subtlePanelClass} space-y-4 lg:col-span-7`}>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Empresa vinculada</p>
+                  <strong className="mt-3 block text-3xl font-semibold tracking-tight text-slate-950">{currentTenantName || "Empresa sem contexto"}</strong>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{billingSubscription ? `Ultima atualizacao em ${formatDate(billingSubscription.updatedAt)}.` : "Defina um plano para liberar recursos e limites operacionais."}</p>
+                </div>
+
+                {canSwitchTenant && (
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Associar plano a empresa</span>
+                    <select
+                      className={inputClass}
+                      value={currentTenantId}
+                      onChange={(event) => { void switchTenant(event.target.value); }}
+                      disabled={switchingTenant}
+                    >
+                      {tenants.map((tenant) => (
+                        <option key={tenant.id} value={tenant.id}>
+                          {tenant.name} ({tenant.segment})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
+
               <div className="grid gap-3 lg:col-span-5">
                 <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Fim do periodo</p>
@@ -105,23 +156,26 @@ export function CommercialWorkspace({
         </div>
 
         <div className="xl:col-span-5">
-          <WorkspaceSection
-            eyebrow="Valor entregue"
-            title="Indicadores de eficiencia"
-         >
+          <WorkspaceSection eyebrow="Capacidade" title="Limites operacionais do plano">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <MetricTile label="WhatsApps liberados" value={String(whatsAppChannelLimit)} detail="Quantidade maxima de numeros que a empresa pode cadastrar." tone="blue" />
+              <MetricTile label="Vagas restantes" value={String(remainingWhatsAppSlots)} detail="Novos numeros permitidos antes de atingir o limite." tone={remainingWhatsAppSlots > 0 ? "emerald" : "amber"} />
               <MetricTile label="Horas economizadas" value={`${valueMetrics?.estimatedHoursSaved ?? 0}h`} detail="Tempo operacional preservado no periodo." tone="emerald" />
               <MetricTile label="Handoffs" value={String(valueMetrics?.humanHandoffs30d ?? 0)} detail="Conversas que exigiram atendimento humano." tone="amber" />
-              <MetricTile label="Receita protegida" value={formatCurrency(valueMetrics?.estimatedRevenueProtected ?? 0, currentPlan?.currency ?? "BRL")} detail="Estimativa financeira baseada na automacao e recuperacao." tone="blue" />
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 text-sm leading-6 text-slate-600 shadow-sm shadow-slate-200/60">
+                {exceedsWhatsAppLimit
+                  ? `A empresa esta com ${whatsAppChannelCount} numero(s) cadastrados para um limite atual de ${whatsAppChannelLimit}. Nenhum novo numero podera ser criado ate reduzir o total ou subir o plano.`
+                  : `A tela de WhatsApp permite cadastrar ate ${whatsAppChannelLimit} numero(s) para esta empresa conforme o plano vigente.`}
+              </div>
             </div>
           </WorkspaceSection>
         </div>
       </section>
 
-      <WorkspaceSection
-        eyebrow="Planos"
-        title="Portfolio comercial"
-     >
+      <WorkspaceSection eyebrow="Planos" title="Portfolio comercial">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
           {billingPlans.map((plan) => {
             const isCurrent = billingSubscription?.planCode === plan.code;
@@ -140,7 +194,10 @@ export function CommercialWorkspace({
                       {isCurrent && <StatusPill tone="blue">Plano atual</StatusPill>}
                       {!isCurrent && plan.isPopular && <StatusPill tone="emerald">Popular</StatusPill>}
                     </div>
-                 </div>
+                    <p className="text-sm leading-6 text-slate-500">
+                      {canSwitchTenant ? `Aplicar este plano para ${currentTenantName}.` : "Plano aplicado a empresa logada."}
+                    </p>
+                  </div>
 
                   <div className="border-t border-slate-200 pt-5">
                     <strong className="text-4xl font-semibold tracking-tight text-slate-950">{formatCurrency(plan.monthlyPrice, plan.currency)}</strong>
@@ -166,8 +223,8 @@ export function CommercialWorkspace({
                 </div>
 
                 <div className="mt-6 flex flex-1 items-end">
-                  <button type="button" className={isCurrent ? secondaryButtonClass : primaryButtonClass} onClick={() => subscribePlan(plan.code)}>
-                    {isCurrent ? "Plano atual" : "Assinar plano"}
+                  <button type="button" className={isCurrent ? secondaryButtonClass : primaryButtonClass} onClick={() => subscribePlan(plan.code)} disabled={switchingTenant}>
+                    {isCurrent ? "Plano atual" : canSwitchTenant ? "Aplicar a empresa" : "Assinar plano"}
                   </button>
                 </div>
               </article>

@@ -57,7 +57,7 @@ npm run dev
 ## SuperAdmin e Switch de Tenant
 
 Credencial de exemplo:
-- superadmin@atend.ai / Admin@123`r
+- superadmin@atend.ai / Admin@123
 
 Endpoints:
 - GET /api/admin/tenants (role SuperAdmin)

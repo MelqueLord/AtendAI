@@ -152,6 +152,7 @@ type CrmWorkspaceProps = {
   cancelAutomationEdit: () => void;
   editAutomationOption: (option: AutomationOption) => void;
   deleteAutomationOption: (optionId: string) => void;
+  openInternalConversation: (contact?: Contact) => void;
   formatDate: (value: string) => string;
 };
 
@@ -204,6 +205,7 @@ export function CrmWorkspace({
   cancelAutomationEdit,
   editAutomationOption,
   deleteAutomationOption,
+  openInternalConversation,
   formatDate
 }: CrmWorkspaceProps) {
   const activeAutomations = automationOptions.filter((option) => option.isActive).length;
@@ -216,6 +218,11 @@ export function CrmWorkspace({
             <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">CRM</span>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">CRM</h2>
+              <p className="max-w-2xl text-sm leading-6 text-slate-600">Gerencie contatos, campanhas e abra o atendimento interno da plataforma sem sair da ferramenta.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button type="button" className={secondaryButtonClass} onClick={() => openInternalConversation()}>Abrir atendimento interno</button>
+              <StatusPill tone="blue">Acesso rapido para operacao manual</StatusPill>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
@@ -413,6 +420,7 @@ export function CrmWorkspace({
                     <td className={tableBodyCellClass}>{formatDate(contact.createdAt)}</td>
                     <td className={tableBodyCellClass}>
                       <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" className={primaryButtonClass} onClick={() => openInternalConversation(contact)}>Atender</button>
                         <button type="button" className={secondaryButtonClass} onClick={() => editContact(contact)}>Editar</button>
                         <button type="button" className={dangerButtonClass} onClick={() => deleteContact(contact.id)}>Excluir</button>
                       </div>
@@ -544,3 +552,4 @@ export function CrmWorkspace({
     </section>
   );
 }
+
