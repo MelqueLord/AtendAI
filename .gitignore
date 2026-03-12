@@ -26,8 +26,10 @@ backend/appsettings.Development.json
 backend/build-verify/
 **/bin/
 **/obj/
+.dotnet/
 appsettings.Development.json
 .env
 .env.*
+whatsapp-web-bridge/data/
 
-
+.fake

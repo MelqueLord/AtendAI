@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.24" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Atendai.Domain/Atendai.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="GlobalUsings.cs" />
+    <Compile Include="DTOs/**/*.cs" />
+    <Compile Include="Interfaces/**/*.cs" />
+    <Compile Include="DependencyInjection/**/*.cs" />
+    <Compile Include="Services/**/*.cs" />
+    <Compile Include="Support/**/*.cs" />
+  </ItemGroup>
+
+</Project>
