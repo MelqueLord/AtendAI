@@ -64,7 +64,13 @@ public sealed class WhatsAppController(
         var sendOnSimulate = configuration.GetValue<bool>("WhatsApp:SendOnSimulate");
         if (sendOnSimulate && !string.IsNullOrWhiteSpace(result.Reply))
         {
-            var sent = await tenantWhatsAppService.SendMessageAsync(tenantId.Value, result.ConversationId, request.CustomerPhone, result.Reply, cancellationToken);
+            var sent = await tenantWhatsAppService.SendMessageAsync(
+                tenantId.Value,
+                result.ConversationId,
+                request.CustomerPhone,
+                result.Reply,
+                cancellationToken,
+                preferredTransport: "meta");
             if (!sent.Success)
             {
                 logger.LogWarning("Simulate executou, mas envio para WhatsApp nao foi concluido.");
@@ -150,11 +156,24 @@ public sealed class WhatsAppController(
                         continue;
                     }
 
-                    var sent = await tenantWhatsAppService.SendMessageAsync(tenantId.Value, reply.ConversationId, incoming.From, reply.Reply, cancellationToken, incomingChannel?.Id);
+                    var sent = await tenantWhatsAppService.SendMessageAsync(
+                        tenantId.Value,
+                        reply.ConversationId,
+                        incoming.From,
+                        reply.Reply,
+                        cancellationToken,
+                        incomingChannel?.Id,
+                        "meta");
 
                     if (!sent.Success)
                     {
                         logger.LogWarning("Falha ao enviar resposta para WhatsApp. Fluxo salvo para conversa {ConversationId}", reply.ConversationId);
+                        await conversationService.HandleAutomaticReplyDeliveryFailureAsync(
+                            tenantId.Value,
+                            reply.ConversationId,
+                            sent.Status,
+                            sent.Error,
+                            cancellationToken);
                     }
                 }
             }

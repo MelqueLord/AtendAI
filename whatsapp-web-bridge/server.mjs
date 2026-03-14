@@ -8,6 +8,7 @@ import QRCode from "qrcode";
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
+  jidNormalizedUser,
   proto,
   useMultiFileAuthState
 } from "@whiskeysockets/baileys";
@@ -212,9 +213,28 @@ app.post("/sessions/:tenantId/send", async (req, res) => {
   }
 
   try {
-    const recipientJid = resolveRecipientJid(session, toPhone);
+    const recipient = await resolveRecipientJid(session, toPhone);
+    if (!recipient.exists) {
+      res.status(404).json({
+        success: false,
+        status: "recipient_not_found",
+        message: "O numero informado nao foi confirmado como conta valida no WhatsApp.",
+        session: serializeSession(session)
+      });
+      return;
+    }
+
+    const recipientJid = recipient.jid;
     const sentMessage = await session.socket.sendMessage(recipientJid, { text: message.trim() });
     storeMessageForRetry(session, sentMessage);
+
+    if (recipient.phone) {
+      const chatPreview = session.chats.get(recipient.phone) || createChatPreview(recipient.phone);
+      chatPreview.remoteJid = recipientJid;
+      session.chats.set(recipient.phone, chatPreview);
+      scheduleCachePersist(session);
+    }
+
     res.json({
       success: true,
       status: "sent",
@@ -413,6 +433,24 @@ async function ensureSession(tenantId, options = {}) {
     }
   });
 
+  socket.ev.on("contacts.upsert", (contacts) => {
+    if (registerContactAliases(session, contacts)) {
+      scheduleCachePersist(session);
+    }
+  });
+
+  socket.ev.on("contacts.update", (contacts) => {
+    if (registerContactAliases(session, contacts)) {
+      scheduleCachePersist(session);
+    }
+  });
+
+  socket.ev.on("chats.phoneNumberShare", ({ lid, jid }) => {
+    if (registerPhoneAlias(session, lid, jid)) {
+      scheduleCachePersist(session);
+    }
+  });
+
   socket.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
     mergeHistorySnapshot(session, chats, contacts, messages);
     scheduleHistorySync(tenantId, session);
@@ -420,6 +458,7 @@ async function ensureSession(tenantId, options = {}) {
 
   socket.ev.on("messages.upsert", async ({ messages }) => {
     for (const message of messages ?? []) {
+      registerMessageAliases(session, message);
       storeMessageForRetry(session, message);
       trackChatFromMessage(session, message);
 
@@ -439,7 +478,7 @@ async function ensureSession(tenantId, options = {}) {
         continue;
       }
 
-      const customerPhone = normalizePhone(remoteJid);
+      const customerPhone = resolveMessageCustomerPhone(session, message);
       if (!customerPhone) {
         logger.warn({ tenantId, remoteJid }, "ignoring qr inbound message without resolvable phone");
         continue;
@@ -508,6 +547,7 @@ function createEmptySession(tenantId) {
     pairingAttempts: 0,
     manualDisconnect: false,
     chats: new Map(),
+    jidPhoneMap: new Map(),
     msgRetryCounterCache: createMemoryCacheStore(),
     messageStore: new Map(),
     historySyncTimer: null,
@@ -563,6 +603,7 @@ function scheduleCachePersist(session, delayMs = 400) {
 
 function clearSessionHistory(session) {
   session.chats = new Map();
+  session.jidPhoneMap = new Map();
   session.lastHistorySyncAt = null;
   scheduleCachePersist(session);
 }
@@ -583,9 +624,23 @@ function scheduleSessionRestart(tenantId, session, delayMs = 2500) {
 
 function mergeHistorySnapshot(session, chats = [], contacts = [], messages = []) {
   const contactNames = new Map();
+  registerContactAliases(session, contacts);
+  for (const message of messages ?? []) {
+    registerMessageAliases(session, message);
+  }
+
   for (const contact of contacts ?? []) {
+    const displayName = contact.notify || contact.name || contact.verifiedName || null;
     if (contact?.id) {
-      contactNames.set(contact.id, contact.notify || contact.name || contact.verifiedName || null);
+      contactNames.set(contact.id, displayName);
+    }
+
+    if (contact?.jid) {
+      contactNames.set(contact.jid, displayName);
+    }
+
+    if (contact?.lid) {
+      contactNames.set(contact.lid, displayName);
     }
   }
 
@@ -594,7 +649,11 @@ function mergeHistorySnapshot(session, chats = [], contacts = [], messages = [])
       continue;
     }
 
-    const customerPhone = normalizePhone(chat.id);
+    const customerPhone = resolveChatCustomerPhone(session, chat);
+    if (!customerPhone) {
+      continue;
+    }
+
     const current = session.chats.get(customerPhone) || createChatPreview(customerPhone);
     const lastMessageAt = toIsoDate(chat.conversationTimestamp || chat.lastMessageRecvTimestamp || chat.lastMessageSendTimestamp);
     current.remoteJid = chat.id || current.remoteJid;
@@ -617,7 +676,8 @@ function trackChatFromMessage(session, message, contactNames = null) {
     return;
   }
 
-  const customerPhone = normalizePhone(remoteJid);
+  registerMessageAliases(session, message);
+  const customerPhone = resolveMessageCustomerPhone(session, message);
   if (!customerPhone) {
     return;
   }
@@ -714,6 +774,7 @@ async function hydrateSessionCache(session) {
     const raw = await fs.readFile(getSessionCachePath(session), "utf8");
     const payload = JSON.parse(raw);
     const chats = Array.isArray(payload?.chats) ? payload.chats : [];
+    const jidPhoneMap = Array.isArray(payload?.jidPhoneMap) ? payload.jidPhoneMap : [];
 
     session.chats = new Map(
       chats
@@ -728,6 +789,15 @@ async function hydrateSessionCache(session) {
           unreadCount: Number(chat.unreadCount || 0)
         }])
     );
+    session.jidPhoneMap = new Map(
+      jidPhoneMap
+        .filter((entry) => Array.isArray(entry) && entry.length === 2)
+        .map(([jid, phone]) => [typeof jid === "string" ? jid : "", normalizePhone(typeof phone === "string" ? phone : "")])
+        .filter(([jid, phone]) => isLidJid(jid) && phone)
+    );
+    for (const [lidJid, customerPhone] of session.jidPhoneMap.entries()) {
+      registerPhoneAlias(session, lidJid, customerPhone);
+    }
     session.lastHistorySyncAt = typeof payload?.lastHistorySyncAt === "string" ? payload.lastHistorySyncAt : null;
   } catch {
     // ignore cache restore failures
@@ -745,6 +815,7 @@ async function persistSessionCache(session) {
       getSessionCachePath(session),
       JSON.stringify({
         lastHistorySyncAt: session.lastHistorySyncAt,
+        jidPhoneMap: Array.from(session.jidPhoneMap.entries()),
         chats: Array.from(session.chats.values())
       }),
       "utf8"
@@ -815,10 +886,86 @@ async function getStoredMessageForRetry(session, key) {
   return session.messageStore.get(buildMessageStoreKey(key)) || proto.Message.fromObject({});
 }
 
-function resolveRecipientJid(session, toPhone) {
+async function resolveRecipientJid(session, toPhone) {
   const normalizedPhone = normalizePhone(toPhone);
-  const cached = session.chats.get(normalizedPhone);
-  return cached?.remoteJid || toJid(toPhone);
+  const preferredPhone = pickCachedRecipientPhone(session, normalizedPhone);
+  const cached = session.chats.get(preferredPhone) || session.chats.get(normalizedPhone);
+  const cachedRemoteJid = typeof cached?.remoteJid === "string" ? cached.remoteJid : "";
+
+  if (isPhoneJid(cachedRemoteJid)) {
+    return { jid: cachedRemoteJid, exists: true, phone: preferredPhone };
+  }
+
+  const resolvedPhone = resolveCustomerPhone(session, cachedRemoteJid, preferredPhone, normalizedPhone);
+  const fallbackJid = resolvedPhone ? toJid(resolvedPhone) : toJid(toPhone);
+  const socket = session.socket;
+
+  if (!socket?.onWhatsApp) {
+    return { jid: fallbackJid, exists: true, phone: resolvedPhone || preferredPhone };
+  }
+
+  try {
+    const [result] = await socket.onWhatsApp(fallbackJid);
+    if (result?.exists && typeof result.jid === "string") {
+      const normalizedJid = jidNormalizedUser(result.jid);
+
+      if (isLidJid(result.lid)) {
+        registerPhoneAlias(session, result.lid, resolvedPhone || preferredPhone || normalizedPhone);
+      }
+
+      return {
+        jid: normalizedJid || fallbackJid,
+        exists: true,
+        phone: resolvedPhone || preferredPhone
+      };
+    }
+
+    logger.warn({ toPhone: normalizedPhone || toPhone, fallbackJid }, "qr recipient was not found on WhatsApp");
+    return { jid: fallbackJid, exists: false, phone: resolvedPhone || preferredPhone };
+  } catch (error) {
+    logger.warn({ err: error, toPhone: normalizedPhone || toPhone, fallbackJid }, "failed to resolve qr recipient via onWhatsApp");
+    return { jid: fallbackJid, exists: true, phone: resolvedPhone || preferredPhone };
+  }
+}
+
+function pickCachedRecipientPhone(session, normalizedPhone) {
+  const candidates = getPhoneLookupCandidates(normalizedPhone);
+  const scored = candidates
+    .map((candidate) => ({
+      phone: candidate,
+      chat: session.chats.get(candidate)
+    }))
+    .filter((entry) => entry.chat);
+
+  const inboundPreferred = scored
+    .filter((entry) => entry.chat?.lastMessageFromMe === false)
+    .sort((left, right) => String(right.chat?.lastMessageAt || "").localeCompare(String(left.chat?.lastMessageAt || "")))[0];
+
+  if (inboundPreferred?.phone) {
+    return inboundPreferred.phone;
+  }
+
+  return scored[0]?.phone || normalizedPhone;
+}
+
+function getPhoneLookupCandidates(value) {
+  const digits = normalizePhone(value || "");
+  if (!digits) {
+    return [];
+  }
+
+  const candidates = new Set([digits]);
+  if (digits.startsWith("55")) {
+    if (digits.length === 13 && digits[4] === "9") {
+      candidates.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+    }
+
+    if (digits.length === 12) {
+      candidates.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+    }
+  }
+
+  return Array.from(candidates);
 }
 
 function getDisconnectStatusCode(error) {
@@ -860,6 +1007,149 @@ function normalizeSocketUser(value) {
 
 function normalizePhone(value) {
   return value.replace(/\D+/g, "");
+}
+
+function isPhoneJid(value) {
+  return typeof value === "string" && (value.endsWith("@s.whatsapp.net") || value.endsWith("@c.us"));
+}
+
+function isLidJid(value) {
+  return typeof value === "string" && value.endsWith("@lid");
+}
+
+function resolvePhoneFromSource(session, value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (isLidJid(trimmed)) {
+    return session.jidPhoneMap.get(trimmed) || null;
+  }
+
+  if (isPhoneJid(trimmed)) {
+    return normalizePhone(trimmed);
+  }
+
+  if (trimmed.includes("@")) {
+    return null;
+  }
+
+  const digits = normalizePhone(trimmed);
+  return digits || null;
+}
+
+function resolveCustomerPhone(session, ...sources) {
+  for (const source of sources) {
+    const resolved = resolvePhoneFromSource(session, source);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+function resolveChatCustomerPhone(session, chat) {
+  return resolveCustomerPhone(session, chat?.id, chat?.jid, chat?.lidJid);
+}
+
+function resolveMessageCustomerPhone(session, message) {
+  const key = message?.key;
+  return resolveCustomerPhone(
+    session,
+    key?.senderPn,
+    key?.participantPn,
+    key?.remoteJid,
+    key?.senderLid,
+    key?.participantLid
+  );
+}
+
+function mergeChatPreview(target, source) {
+  if (!source) {
+    return target;
+  }
+
+  target.remoteJid = target.remoteJid || source.remoteJid;
+  target.customerName = resolveCustomerName(target.customerPhone, target.customerName, source.customerName);
+
+  const targetTimestamp = target.lastMessageAt || "";
+  const sourceTimestamp = source.lastMessageAt || "";
+  if (sourceTimestamp && (!targetTimestamp || sourceTimestamp > targetTimestamp)) {
+    target.lastMessage = source.lastMessage;
+    target.lastMessageFromMe = Boolean(source.lastMessageFromMe);
+    target.lastMessageAt = source.lastMessageAt;
+  } else if (!target.lastMessage) {
+    target.lastMessage = source.lastMessage;
+  }
+
+  target.unreadCount = Math.max(Number(target.unreadCount || 0), Number(source.unreadCount || 0));
+  return target;
+}
+
+function registerPhoneAlias(session, lidJid, phoneSource) {
+  if (!isLidJid(lidJid)) {
+    return false;
+  }
+
+  const customerPhone = resolveCustomerPhone(session, phoneSource);
+  if (!customerPhone) {
+    return false;
+  }
+
+  let changed = false;
+  if (session.jidPhoneMap.get(lidJid) !== customerPhone) {
+    session.jidPhoneMap.set(lidJid, customerPhone);
+    changed = true;
+  }
+
+  const opaquePhone = normalizePhone(lidJid);
+  if (opaquePhone && opaquePhone !== customerPhone && session.chats.has(opaquePhone)) {
+    const opaqueChat = session.chats.get(opaquePhone);
+    session.chats.delete(opaquePhone);
+    const mergedChat = mergeChatPreview(session.chats.get(customerPhone) || createChatPreview(customerPhone), opaqueChat);
+    mergedChat.remoteJid = lidJid;
+    session.chats.set(customerPhone, mergedChat);
+    changed = true;
+  }
+
+  return changed;
+}
+
+function registerContactAliases(session, contacts = []) {
+  let changed = false;
+
+  for (const contact of contacts ?? []) {
+    const lidCandidates = [contact?.id, contact?.lid].filter(isLidJid);
+    const phoneCandidates = [contact?.jid, contact?.id, contact?.lid];
+    for (const lidJid of lidCandidates) {
+      for (const phoneSource of phoneCandidates) {
+        changed = registerPhoneAlias(session, lidJid, phoneSource) || changed;
+      }
+    }
+  }
+
+  return changed;
+}
+
+function registerMessageAliases(session, message) {
+  const key = message?.key;
+  const lidCandidates = [key?.remoteJid, key?.senderLid, key?.participantLid].filter(isLidJid);
+  const phoneCandidates = [key?.senderPn, key?.participantPn, key?.remoteJid];
+  let changed = false;
+
+  for (const lidJid of lidCandidates) {
+    for (const phoneSource of phoneCandidates) {
+      changed = registerPhoneAlias(session, lidJid, phoneSource) || changed;
+    }
+  }
+
+  return changed;
 }
 
 function resolveCustomerName(customerPhone, ...candidates) {

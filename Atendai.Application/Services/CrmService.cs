@@ -1,6 +1,7 @@
 using Atendai.Application.DTOs;
 using Atendai.Application.Interfaces;
 using Atendai.Application.Interfaces.Repositories;
+using Atendai.Application.Support;
 using Atendai.Domain.Entities;
 
 namespace Atendai.Application.Services;
@@ -84,21 +85,22 @@ public sealed class CrmService(
 
     public async Task EnsureContactExistsAsync(Guid tenantId, string customerPhone, string? customerName, CancellationToken cancellationToken = default)
     {
-        var existing = await contactRepository.FindContactByPhoneAsync(tenantId, customerPhone, cancellationToken);
+        var normalizedPhone = PhoneNumberNormalizer.Normalize(customerPhone);
+        var existing = await contactRepository.FindContactByPhoneAsync(tenantId, normalizedPhone, cancellationToken);
         if (existing is not null)
         {
             return;
         }
 
-        var name = CustomerIdentityResolver.ResolveDisplayName(customerPhone, customerName);
+        var name = CustomerIdentityResolver.ResolveDisplayName(normalizedPhone, customerName);
         try
         {
-            await contactRepository.CreateContactAsync(tenantId, name, customerPhone, null, "Novo lead", ["WhatsApp"], null, cancellationToken);
+            await contactRepository.CreateContactAsync(tenantId, name, normalizedPhone, null, "Novo lead", ["WhatsApp"], null, cancellationToken);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase))
         {
             // Another flow already created the contact, or a soft-deleted record still owns the unique key.
-            var recovered = await contactRepository.FindContactByPhoneAsync(tenantId, customerPhone, cancellationToken);
+            var recovered = await contactRepository.FindContactByPhoneAsync(tenantId, normalizedPhone, cancellationToken);
             if (recovered is not null)
             {
                 return;

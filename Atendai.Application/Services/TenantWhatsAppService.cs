@@ -1,6 +1,7 @@
 using Atendai.Application.Interfaces;
 using Atendai.Application.DTOs;
 using Atendai.Application.Interfaces.Repositories;
+using Atendai.Application.Support;
 using Atendai.Domain.Entities;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -148,80 +149,57 @@ public sealed class TenantWhatsAppService(
         return whatsAppRepository.FindTenantIdByVerifyTokenAsync(verifyToken, cancellationToken);
     }
 
-    public async Task<WhatsAppSendResult> SendMessageAsync(Guid tenantId, Guid? conversationId, string toPhone, string message, CancellationToken cancellationToken = default, Guid? channelId = null)
+    public async Task<WhatsAppSendResult> SendMessageAsync(Guid tenantId, Guid? conversationId, string toPhone, string message, CancellationToken cancellationToken = default, Guid? channelId = null, string? preferredTransport = null)
     {
+        var normalizedToPhone = PhoneNumberNormalizer.Normalize(toPhone);
+        if (string.IsNullOrWhiteSpace(normalizedToPhone))
+        {
+            normalizedToPhone = toPhone.Trim();
+        }
+
         var conversationTransport = conversationId.HasValue
             ? await conversationRepository.GetConversationTransportAsync(tenantId, conversationId.Value, cancellationToken)
             : null;
+        var targetTransport = NormalizeTransport(preferredTransport)
+            ?? NormalizeTransport(conversationTransport);
 
-        if (string.Equals(conversationTransport, "qr", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(targetTransport, "qr", StringComparison.OrdinalIgnoreCase))
         {
-            var qrSend = await TrySendViaQrSessionAsync(tenantId, toPhone, message, cancellationToken);
-            if (qrSend is not null)
-            {
-                await whatsAppRepository.AddWhatsAppMessageLogAsync(
-                    tenantId,
-                    conversationId,
-                    toPhone,
-                    "outbound",
-                    qrSend.Status,
-                    qrSend.Error,
-                    message,
-                    cancellationToken);
-
-                return qrSend;
-            }
+            var qrSend = await SendViaQrSessionAsync(tenantId, normalizedToPhone, message, cancellationToken);
+            await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, qrSend, message, cancellationToken);
+            return qrSend;
         }
 
-        var credentials = await GetCredentialsAsync(tenantId, cancellationToken, channelId);
-        if (credentials is null)
+        if (string.Equals(targetTransport, "meta", StringComparison.OrdinalIgnoreCase))
         {
-            var qrFallback = await TrySendViaQrSessionAsync(tenantId, toPhone, message, cancellationToken);
-            if (qrFallback is not null)
-            {
-                await whatsAppRepository.AddWhatsAppMessageLogAsync(
-                    tenantId,
-                    conversationId,
-                    toPhone,
-                    "outbound",
-                    qrFallback.Status,
-                    qrFallback.Error,
-                    message,
-                    cancellationToken);
-
-                return qrFallback;
-            }
-
-            var notConfigured = new WhatsAppSendResult
-            {
-                Success = false,
-                Status = "not_configured",
-                Error = "WhatsApp nao configurado para este tenant."
-            };
-
-            await whatsAppRepository.AddWhatsAppMessageLogAsync(tenantId, conversationId, toPhone, "outbound", notConfigured.Status, notConfigured.Error, message, cancellationToken);
-            return notConfigured;
+            var metaSend = await SendViaMetaAsync(tenantId, normalizedToPhone, message, cancellationToken, channelId);
+            await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, metaSend, message, cancellationToken);
+            return metaSend;
         }
 
-        var send = await whatsAppCloudService.SendTextMessageWithCredentialsAsync(
-            credentials.Value.PhoneNumberId,
-            credentials.Value.AccessToken,
-            toPhone,
-            message,
-            ApiVersion,
-            cancellationToken);
+        var send = await SendViaMetaAsync(tenantId, normalizedToPhone, message, cancellationToken, channelId);
+        if (send.Success)
+        {
+            await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, send, message, cancellationToken);
+            return send;
+        }
 
-        await whatsAppRepository.AddWhatsAppMessageLogAsync(
-            tenantId,
-            conversationId,
-            toPhone,
-            "outbound",
-            send.Status,
-            send.Error,
-            message,
-            cancellationToken);
+        if (!string.Equals(send.Status, "not_configured", StringComparison.OrdinalIgnoreCase))
+        {
+            await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, send, message, cancellationToken);
+            return send;
+        }
 
-        return send;
+        var qrFallback = await SendViaQrSessionAsync(tenantId, normalizedToPhone, message, cancellationToken);
+        if (qrFallback.Success || !string.Equals(qrFallback.Status, "not_configured_qr", StringComparison.OrdinalIgnoreCase))
+        {
+            await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, qrFallback, message, cancellationToken);
+            return qrFallback;
+        }
+
+        var notConfigured = BuildNotConfiguredResult();
+        await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, notConfigured, message, cancellationToken);
+        return notConfigured;
     }
 
     public async Task<List<WhatsAppMessageLogResponse>> GetLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default)
@@ -449,14 +427,38 @@ public sealed class TenantWhatsAppService(
         return (channel.PhoneNumberId, token);
     }
 
-    private async Task<WhatsAppSendResult?> TrySendViaQrSessionAsync(Guid tenantId, string toPhone, string message, CancellationToken cancellationToken)
+    private async Task<WhatsAppSendResult> SendViaMetaAsync(Guid tenantId, string toPhone, string message, CancellationToken cancellationToken, Guid? channelId)
     {
-        var qrState = await whatsAppWebSessionService.GetStateAsync(tenantId, cancellationToken);
-        if (!qrState.IsConfigured || !string.Equals(qrState.Status, "connected", StringComparison.OrdinalIgnoreCase))
+        var credentials = await GetCredentialsAsync(tenantId, cancellationToken, channelId);
+        if (credentials is null)
         {
-            return null;
+            return BuildNotConfiguredResult();
         }
 
+        return await whatsAppCloudService.SendTextMessageWithCredentialsAsync(
+            credentials.Value.PhoneNumberId,
+            credentials.Value.AccessToken,
+            toPhone,
+            message,
+            ApiVersion,
+            cancellationToken);
+    }
+
+    private async Task LogSendResultAsync(Guid tenantId, Guid? conversationId, string toPhone, WhatsAppSendResult send, string message, CancellationToken cancellationToken)
+    {
+        await whatsAppRepository.AddWhatsAppMessageLogAsync(
+            tenantId,
+            conversationId,
+            toPhone,
+            "outbound",
+            send.Status,
+            send.Error,
+            message,
+            cancellationToken);
+    }
+
+    private async Task<WhatsAppSendResult> SendViaQrSessionAsync(Guid tenantId, string toPhone, string message, CancellationToken cancellationToken)
+    {
         var qrSend = await whatsAppWebSessionService.SendMessageAsync(
             tenantId,
             new SendWhatsAppWebSessionMessageRequest(toPhone, message),
@@ -465,9 +467,41 @@ public sealed class TenantWhatsAppService(
         return new WhatsAppSendResult
         {
             Success = qrSend.Success,
-            Status = qrSend.Success ? "sent_qr" : qrSend.Status,
+            Status = qrSend.Success ? "sent_qr" : NormalizeQrStatus(qrSend.Status),
             Error = qrSend.Success ? null : qrSend.Message
         };
+    }
+
+    private static WhatsAppSendResult BuildNotConfiguredResult()
+    {
+        return new WhatsAppSendResult
+        {
+            Success = false,
+            Status = "not_configured",
+            Error = "WhatsApp nao configurado para este tenant."
+        };
+    }
+
+    private static string? NormalizeTransport(string? transport)
+    {
+        if (string.IsNullOrWhiteSpace(transport))
+        {
+            return null;
+        }
+
+        return transport.Trim().ToLowerInvariant();
+    }
+
+    private static string NormalizeQrStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "error_qr";
+        }
+
+        return status.Contains("qr", StringComparison.OrdinalIgnoreCase)
+            ? status
+            : $"{status}_qr";
     }
 
     private async Task<string> ExchangeEmbeddedSignupCodeAsync(string code, CancellationToken cancellationToken)
