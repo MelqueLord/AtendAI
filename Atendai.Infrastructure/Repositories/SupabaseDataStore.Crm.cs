@@ -1,6 +1,7 @@
 using Atendai.Application.Interfaces;
 using System.Text.Json.Serialization;
 using Atendai.Application.DTOs;
+using Atendai.Application.Support;
 using Atendai.Domain.Entities;
 
 namespace Atendai.Infrastructure.Repositories;
@@ -100,11 +101,39 @@ public sealed partial class SupabaseDataStore
     public async Task<ContactResponse?> FindContactByPhoneAsync(Guid tenantId, string phone, CancellationToken cancellationToken = default)
     {
         var normalizedPhone = NormalizePhone(phone);
-        var rows = await GetAsync<List<ContactRow>>(
-            $"contacts?tenant_id=eq.{tenantId}&phone=eq.{Uri.EscapeDataString(normalizedPhone)}&deleted_at=is.null&select=id,name,phone,state,status,tags,created_at,owner_user_id,users(name)&limit=1",
-            cancellationToken);
+        var phoneFilter = BuildPhoneLookupFilter("phone", phone);
+        var exactFilter = $"phone=eq.{Uri.EscapeDataString(normalizedPhone)}";
+        ContactRow? row = null;
 
-        var row = rows.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(normalizedPhone))
+        {
+            row = (await GetAsync<List<ContactRow>>(
+                $"contacts?tenant_id=eq.{tenantId}&{exactFilter}&deleted_at=is.null&select=id,name,phone,state,status,tags,created_at,owner_user_id,users(name)&order=created_at.desc&limit=1",
+                cancellationToken)).FirstOrDefault();
+        }
+
+        if (row is null && !string.Equals(phoneFilter, exactFilter, StringComparison.Ordinal))
+        {
+            row = (await GetAsync<List<ContactRow>>(
+                $"contacts?tenant_id=eq.{tenantId}&{phoneFilter}&deleted_at=is.null&select=id,name,phone,state,status,tags,created_at,owner_user_id,users(name)&order=created_at.desc&limit=1",
+                cancellationToken)).FirstOrDefault();
+        }
+
+        if (row is not null && !string.IsNullOrWhiteSpace(normalizedPhone) && !string.Equals(row.Phone, normalizedPhone, StringComparison.Ordinal))
+        {
+            try
+            {
+                await PatchAsync($"contacts?id=eq.{row.Id}&tenant_id=eq.{tenantId}&deleted_at=is.null", new { phone = normalizedPhone }, cancellationToken);
+                row.Phone = normalizedPhone;
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+            {
+                // If another normalized contact already exists, keep the current one and avoid breaking the flow.
+            }
+        }
+
         return row is null ? null : MapContact(row);
     }
 
@@ -558,7 +587,7 @@ public sealed partial class SupabaseDataStore
 
     private static string NormalizePhone(string phone)
     {
-        return new string(phone.Where(char.IsDigit).ToArray());
+        return PhoneNumberNormalizer.Normalize(phone);
     }
 
     private static string[] NormalizeTags(string[] tags)

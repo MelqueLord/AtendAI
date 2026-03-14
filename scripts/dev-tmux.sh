@@ -16,7 +16,7 @@ if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
 fi
 
 tmux new-session -d -s "${SESSION_NAME}" -n api
-tmux send-keys -t "${SESSION_NAME}:api" "cd '${ROOT_DIR}' && ./.dotnet/dotnet run --project Atendai.API/Atendai.API.csproj --launch-profile http" C-m
+tmux send-keys -t "${SESSION_NAME}:api" "cd '${ROOT_DIR}' && ./scripts/run-api.sh" C-m
 
 tmux new-window -t "${SESSION_NAME}" -n bridge
 tmux send-keys -t "${SESSION_NAME}:bridge" "cd '${ROOT_DIR}/whatsapp-web-bridge' && node server.mjs" C-m

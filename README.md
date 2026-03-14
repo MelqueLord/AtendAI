@@ -44,7 +44,7 @@ API:
 
 ```bash
 cd /home/lordelo/Documentos/AtendAI
-./.dotnet/dotnet run --project Atendai.API/Atendai.API.csproj --launch-profile http
+./scripts/run-api.sh
 ```
 
 Web:
@@ -75,8 +75,10 @@ node server.mjs
 
 ## Build local
 
-- API: o projeto compila em `.NET 8` com o SDK local em `./.dotnet`
+- API: `./scripts/build-api.sh`
 - Web: `npm run build`
+
+`./scripts/run-api.sh` escolhe automaticamente um `dotnet` com runtime `.NET 8`.
 
 ## SuperAdmin e Switch de Tenant
 

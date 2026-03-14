@@ -130,11 +130,30 @@ public sealed class WhatsAppWebSessionService(
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                var state = await GetStateAsyncFromBridgeSafe(tenantId, cancellationToken);
+
+                try
+                {
+                    var errorPayload = JsonSerializer.Deserialize<WhatsAppWebSessionActionResponse>(error, JsonOptions);
+                    if (errorPayload is not null)
+                    {
+                        return new WhatsAppWebSessionActionResponse(
+                            false,
+                            string.IsNullOrWhiteSpace(errorPayload.Status) ? "bridge_error" : errorPayload.Status,
+                            string.IsNullOrWhiteSpace(errorPayload.Message) ? $"A bridge QR respondeu com erro {(int)response.StatusCode}." : errorPayload.Message,
+                            errorPayload.Session ?? state);
+                    }
+                }
+                catch
+                {
+                    // Fall back to the raw bridge error below when the payload is not JSON.
+                }
+
                 return new WhatsAppWebSessionActionResponse(
                     false,
                     "bridge_error",
                     $"A bridge QR respondeu com erro {(int)response.StatusCode}: {error}",
-                    await GetStateAsyncFromBridgeSafe(tenantId, cancellationToken));
+                    state);
             }
 
             var payload = await response.Content.ReadFromJsonAsync<WhatsAppWebSessionActionResponse>(JsonOptions, cancellationToken);

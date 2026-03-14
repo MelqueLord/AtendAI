@@ -71,6 +71,17 @@ public sealed class ConversationsController(IConversationService conversationSer
 
         try
         {
+            var currentConversation = await conversationService.GetConversationByIdAsync(tenantId.Value, conversationId, cancellationToken);
+            if (currentConversation is null)
+            {
+                return NotFound(new { message = "Conversa nao encontrada." });
+            }
+
+            if (!IsAllowedTransition(currentConversation.Status, request.Status))
+            {
+                return BadRequest(new { message = "Transicao de status nao permitida para o estado atual da conversa." });
+            }
+
             var updated = await conversationService.UpdateStatusAsync(tenantId.Value, conversationId, request.Status, cancellationToken);
             return updated is null ? NotFound(new { message = "Conversa nao encontrada." }) : Ok(updated);
         }
@@ -211,6 +222,47 @@ public sealed class ConversationsController(IConversationService conversationSer
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    private static bool IsAllowedTransition(string currentStatus, string nextStatus)
+    {
+        var current = NormalizeStatus(currentStatus);
+        var next = NormalizeStatus(nextStatus);
+
+        if (current == next)
+        {
+            return true;
+        }
+
+        return current switch
+        {
+            "BotHandling" => next is "WaitingHuman" or "HumanHandling" or "Closed",
+            "WaitingHuman" => next is "BotHandling" or "HumanHandling" or "Closed",
+            "HumanHandling" => next is "BotHandling" or "WaitingHuman" or "Closed",
+            "Closed" => next is "BotHandling" or "HumanHandling",
+            _ => false
+        };
+    }
+
+    private static string NormalizeStatus(string status)
+    {
+        var value = status.Trim();
+        if (value.Equals("WaitingHuman", StringComparison.OrdinalIgnoreCase))
+        {
+            return "WaitingHuman";
+        }
+
+        if (value.Equals("HumanHandling", StringComparison.OrdinalIgnoreCase))
+        {
+            return "HumanHandling";
+        }
+
+        if (value.Equals("Closed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Closed";
+        }
+
+        return "BotHandling";
+    }
     [HttpPost("{conversationId:guid}/human-reply")]
     [Authorize(Roles = "Admin,Agent,SuperAdmin")]
     public async Task<IActionResult> HumanReply(Guid conversationId, [FromBody] HumanReplyRequest request, CancellationToken cancellationToken)
@@ -240,4 +292,3 @@ public sealed class ConversationsController(IConversationService conversationSer
         return Ok(result);
     }
 }
-

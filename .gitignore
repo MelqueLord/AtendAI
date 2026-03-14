@@ -1,6 +1,8 @@
 ﻿# .NET
 bin/
 obj/
+**/bin/
+**/obj/
 
 # Node
 node_modules/
@@ -17,19 +19,13 @@ dist/
 Thumbs.db
 
 # Secrets
-backend/appsettings.json
-backend/appsettings.Development.json
+Atendai.API/appsettings.Development.json
+Atendai.API/appsettings.json
 
-
-.history/
-
-backend/build-verify/
-**/bin/
-**/obj/
-.dotnet/
-appsettings.Development.json
 .env
 .env.*
-whatsapp-web-bridge/data/
 
+.history/
+.dotnet/
+whatsapp-web-bridge/data/
 .fake

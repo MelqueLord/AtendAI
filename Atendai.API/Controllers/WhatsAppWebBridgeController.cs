@@ -40,11 +40,23 @@ public sealed class WhatsAppWebBridgeController(
             });
         }
 
-        var sent = await tenantWhatsAppService.SendMessageAsync(tenantId, reply.ConversationId, request.CustomerPhone, reply.Reply, cancellationToken);
+        var sent = await tenantWhatsAppService.SendMessageAsync(
+            tenantId,
+            reply.ConversationId,
+            request.CustomerPhone,
+            reply.Reply,
+            cancellationToken,
+            preferredTransport: "qr");
 
         if (!sent.Success)
         {
             logger.LogWarning("Bridge QR recebeu mensagem mas a resposta nao foi enviada para a conversa {ConversationId}", reply.ConversationId);
+            await conversationService.HandleAutomaticReplyDeliveryFailureAsync(
+                tenantId,
+                reply.ConversationId,
+                sent.Status,
+                sent.Error,
+                cancellationToken);
         }
 
         return Ok(new

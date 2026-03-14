@@ -1,6 +1,7 @@
 using Atendai.Application.Interfaces;
 using Atendai.Application.DTOs;
 using Atendai.Application.Interfaces.Repositories;
+using Atendai.Application.Support;
 using Atendai.Domain.Entities;
 
 namespace Atendai.Application.Services;
@@ -18,6 +19,8 @@ public sealed class ConversationService(
     ICrmService crmService,
     IAttendanceRealtimeNotifier realtimeNotifier) : IConversationService
 {
+    private static readonly TimeSpan HumanModeHoldWindow = TimeSpan.FromMinutes(30);
+
     public async Task<List<ConversationResponse>> GetConversationsAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         var conversations = await conversationRepository.GetConversationSummariesAsync(tenantId, cancellationToken);
@@ -32,11 +35,12 @@ public sealed class ConversationService(
 
     public async Task<OutgoingMessageResponse> HandleIncomingAsync(Guid tenantId, IncomingMessageRequest request, Guid? channelId = null, string transport = "meta", CancellationToken cancellationToken = default)
     {
-        var customerName = await ResolveCustomerNameAsync(tenantId, request.CustomerPhone, request.CustomerName, cancellationToken);
-        await crmService.EnsureContactExistsAsync(tenantId, request.CustomerPhone, customerName, cancellationToken);
+        var customerPhone = PhoneNumberNormalizer.Normalize(request.CustomerPhone);
+        var customerName = await ResolveCustomerNameAsync(tenantId, customerPhone, request.CustomerName, cancellationToken);
+        await crmService.EnsureContactExistsAsync(tenantId, customerPhone, customerName, cancellationToken);
 
-        var conversation = await conversationRepository.GetOrCreateConversationAsync(tenantId, request.CustomerPhone, customerName, channelId, cancellationToken);
-        if (CustomerIdentityResolver.ShouldReplaceStoredName(conversation.CustomerName, customerName, request.CustomerPhone))
+        var conversation = await conversationRepository.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, channelId, cancellationToken);
+        if (CustomerIdentityResolver.ShouldReplaceStoredName(conversation.CustomerName, customerName, customerPhone))
         {
             await conversationRepository.UpdateConversationCustomerNameAsync(tenantId, conversation.Id, customerName, cancellationToken);
             conversation.CustomerName = customerName;
@@ -46,7 +50,7 @@ public sealed class ConversationService(
         await whatsAppRepository.AddWhatsAppMessageLogAsync(
             tenantId,
             conversation.Id,
-            request.CustomerPhone,
+            customerPhone,
             "inbound",
             string.Equals(transport, "qr", StringComparison.OrdinalIgnoreCase) ? "received_qr" : "received",
             null,
@@ -55,10 +59,22 @@ public sealed class ConversationService(
 
         if (conversation.Status is ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling)
         {
-            notification.NotifyHuman(conversation.CustomerPhone, conversation.CustomerName);
-            await campaignAutomationService.EnqueueForConversationAsync(tenantId, conversation, cancellationToken);
-            await realtimeNotifier.NotifyInboxChangedAsync(tenantId, conversation.Id, cancellationToken);
-            return new OutgoingMessageResponse(string.Empty, true, conversation.Id);
+            if (ShouldKeepHumanMode(conversation, DateTimeOffset.UtcNow))
+            {
+                notification.NotifyHuman(conversation.CustomerPhone, conversation.CustomerName);
+                await campaignAutomationService.EnqueueForConversationAsync(tenantId, conversation, cancellationToken);
+                await realtimeNotifier.NotifyInboxChangedAsync(tenantId, conversation.Id, cancellationToken);
+                return new OutgoingMessageResponse(string.Empty, true, conversation.Id);
+            }
+
+            await conversationRepository.UpdateConversationStatusAsync(tenantId, conversation.Id, ConversationStatus.BotHandling, cancellationToken);
+            await conversationRepository.AddConversationMessageAsync(
+                tenantId,
+                conversation.Id,
+                "System",
+                "Conversa retomada automaticamente pela IA apos inatividade no modo humano.",
+                cancellationToken);
+            conversation.Status = ConversationStatus.BotHandling;
         }
 
         var (reply, escalate) = await aiResponder.BuildReplyAsync(tenantId, conversation, request.Message, cancellationToken);
@@ -78,6 +94,26 @@ public sealed class ConversationService(
         return new OutgoingMessageResponse(reply, escalate, conversation.Id);
     }
 
+    public async Task HandleAutomaticReplyDeliveryFailureAsync(Guid tenantId, Guid conversationId, string status, string? error, CancellationToken cancellationToken = default)
+    {
+        var conversation = await conversationRepository.GetConversationByIdAsync(tenantId, conversationId, cancellationToken);
+        if (conversation is null)
+        {
+            return;
+        }
+
+        var detail = string.IsNullOrWhiteSpace(error) ? status : error.Trim();
+        await conversationRepository.AddConversationMessageAsync(
+            tenantId,
+            conversationId,
+            "System",
+            $"Falha ao entregar resposta automatica no WhatsApp: {detail}",
+            cancellationToken);
+        await conversationRepository.UpdateConversationStatusAsync(tenantId, conversationId, ConversationStatus.WaitingHuman, cancellationToken);
+        notification.NotifyHuman(conversation.CustomerPhone, conversation.CustomerName);
+        await realtimeNotifier.NotifyInboxChangedAsync(tenantId, conversationId, cancellationToken);
+    }
+
     public async Task<SyncWhatsAppWebHistoryResponse> ImportWhatsAppWebHistoryAsync(Guid tenantId, SyncWhatsAppWebHistoryRequest request, CancellationToken cancellationToken = default)
     {
         var imported = 0;
@@ -86,7 +122,7 @@ public sealed class ConversationService(
 
         foreach (var chat in chats)
         {
-            var customerPhone = chat.CustomerPhone.Trim();
+            var customerPhone = PhoneNumberNormalizer.Normalize(chat.CustomerPhone);
             if (string.IsNullOrWhiteSpace(customerPhone))
             {
                 skipped++;
@@ -128,7 +164,11 @@ public sealed class ConversationService(
             if (!string.IsNullOrWhiteSpace(lastMessage))
             {
                 var sender = chat.LastMessageFromMe ? "HumanAgent" : "Customer";
-                var restoredStatus = chat.LastMessageFromMe ? ConversationStatus.HumanHandling : ConversationStatus.BotHandling;
+                var currentStatus = currentConversation?.Status ?? conversation.Status;
+                var restoredStatus = currentStatus is ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling or ConversationStatus.Closed
+                    ? currentStatus
+                    : ConversationStatus.BotHandling;
+
                 await conversationRepository.AddConversationMessageAsync(tenantId, conversation.Id, sender, lastMessage, cancellationToken);
                 await conversationRepository.UpdateConversationStatusAsync(
                     tenantId,
@@ -155,7 +195,7 @@ public sealed class ConversationService(
             throw new ArgumentException("Telefone e mensagem sao obrigatorios.");
         }
 
-        var customerPhone = request.CustomerPhone.Trim();
+        var customerPhone = PhoneNumberNormalizer.Normalize(request.CustomerPhone);
         var customerName = await ResolveCustomerNameAsync(tenantId, customerPhone, request.CustomerName, cancellationToken);
         var message = request.Message.Trim();
 
@@ -282,6 +322,17 @@ public sealed class ConversationService(
     {
         var existingContact = await contactRepository.FindContactByPhoneAsync(tenantId, customerPhone, cancellationToken);
         return CustomerIdentityResolver.ResolveDisplayName(customerPhone, existingContact?.Name, incomingName);
+    }
+
+    private static bool ShouldKeepHumanMode(Conversation conversation, DateTimeOffset now)
+    {
+        if (conversation.Status is not (ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling))
+        {
+            return false;
+        }
+
+        var lastHumanTouch = conversation.LastHumanMessageAt ?? conversation.UpdatedAt;
+        return now - lastHumanTouch <= HumanModeHoldWindow;
     }
 
     private static ConversationResponse MapConversation(Conversation conversation)

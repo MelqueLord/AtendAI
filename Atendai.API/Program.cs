@@ -75,6 +75,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+var configuredUrls = builder.Configuration["ASPNETCORE_URLS"]
+    ?? builder.Configuration["URLS"]
+    ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+    ?? Environment.GetEnvironmentVariable("URLS");
+var hasHttpsBinding = configuredUrls?
+    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Any(url => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) == true;
 
 if (app.Environment.IsDevelopment())
 {
@@ -82,7 +89,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment() || hasHttpsBinding)
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors("frontend");
 app.UseAuthentication();
 app.UseAuthorization();

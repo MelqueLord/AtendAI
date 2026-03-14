@@ -10,6 +10,7 @@ namespace Atendai.Infrastructure.Repositories;
 
 public sealed partial class SupabaseDataStore
 {
+    private const int RecentConversationMessageWindow = 160;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -434,15 +435,27 @@ public sealed partial class SupabaseDataStore
 
     public async Task<Conversation> GetOrCreateConversationAsync(Guid tenantId, string customerPhone, string? customerName, Guid? channelId = null, CancellationToken cancellationToken = default)
     {
-        var encodedPhone = Uri.EscapeDataString(customerPhone);
+        var normalizedPhone = NormalizePhone(customerPhone);
+        var phoneFilter = BuildPhoneLookupFilter("customer_phone", customerPhone);
+        var exactFilter = $"customer_phone=eq.{Uri.EscapeDataString(normalizedPhone)}";
         var channelFilter = channelId.HasValue
             ? $"&channel_id=eq.{channelId.Value}"
             : "&channel_id=is.null";
-        var rows = await GetAsync<List<ConversationRow>>(
-            $"conversations?tenant_id=eq.{tenantId}&customer_phone=eq.{encodedPhone}{channelFilter}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&limit=1",
-            cancellationToken);
+        ConversationRow? row = null;
 
-        var row = rows.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(normalizedPhone))
+        {
+            row = (await GetAsync<List<ConversationRow>>(
+                $"conversations?tenant_id=eq.{tenantId}&{exactFilter}{channelFilter}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit=1",
+                cancellationToken)).FirstOrDefault();
+        }
+
+        if (row is null && !string.Equals(phoneFilter, exactFilter, StringComparison.Ordinal))
+        {
+            row = (await GetAsync<List<ConversationRow>>(
+                $"conversations?tenant_id=eq.{tenantId}&{phoneFilter}{channelFilter}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit=1",
+                cancellationToken)).FirstOrDefault();
+        }
 
         if (row is null)
         {
@@ -451,7 +464,7 @@ public sealed partial class SupabaseDataStore
                 new
                 {
                     tenant_id = tenantId,
-                    customer_phone = customerPhone,
+                    customer_phone = normalizedPhone,
                     customer_name = string.IsNullOrWhiteSpace(customerName) ? "Cliente" : customerName,
                     channel_id = channelId,
                     status = nameof(ConversationStatus.BotHandling)
@@ -459,6 +472,24 @@ public sealed partial class SupabaseDataStore
             }, cancellationToken);
 
             row = insertRows.First();
+        }
+        else if (!string.IsNullOrWhiteSpace(normalizedPhone) && !string.Equals(row.CustomerPhone, normalizedPhone, StringComparison.Ordinal))
+        {
+            try
+            {
+                await PatchAsync($"conversations?id=eq.{row.Id}&tenant_id=eq.{tenantId}", new
+                {
+                    customer_phone = normalizedPhone,
+                    updated_at = DateTimeOffset.UtcNow
+                }, cancellationToken);
+                row.CustomerPhone = normalizedPhone;
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+            {
+                // Keep the existing conversation if another row already owns the normalized phone.
+            }
         }
 
         return MapConversation(row, []);
@@ -516,8 +547,7 @@ public sealed partial class SupabaseDataStore
 
         foreach (var row in conversations)
         {
-            var transport = await GetConversationTransportAsync(tenantId, row.Id, cancellationToken);
-            result.Add(MapConversation(row, [], transport));
+            result.Add(MapConversation(row, []));
         }
 
         return result;
@@ -556,8 +586,9 @@ public sealed partial class SupabaseDataStore
         }
 
         var messages = await GetAsync<List<MessageRow>>(
-            $"conversation_messages?conversation_id=eq.{conversationId}&select=*&order=created_at.asc",
+            $"conversation_messages?conversation_id=eq.{conversationId}&select=*&order=created_at.desc&limit={RecentConversationMessageWindow}",
             cancellationToken);
+        messages.Reverse();
 
         var transport = await GetConversationTransportAsync(tenantId, conversationId, cancellationToken);
         return MapConversation(row, messages, transport);
@@ -998,6 +1029,27 @@ public sealed partial class SupabaseDataStore
         return new StringContent(json, Encoding.UTF8, "application/json");
     }
 
+    private static string BuildPhoneLookupFilter(string fieldName, string phone)
+    {
+        var candidates = PhoneNumberNormalizer.GetLookupCandidates(phone)
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (candidates.Length == 0)
+        {
+            return $"{fieldName}=eq.{Uri.EscapeDataString(NormalizePhone(phone))}";
+        }
+
+        if (candidates.Length == 1)
+        {
+            return $"{fieldName}=eq.{Uri.EscapeDataString(candidates[0])}";
+        }
+
+        var clauses = string.Join(",", candidates.Select(candidate => $"{fieldName}.eq.{Uri.EscapeDataString(candidate)}"));
+        return $"or=({clauses})";
+    }
+
     private async Task EnsureSuccess(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
@@ -1195,6 +1247,3 @@ public sealed partial class SupabaseDataStore
         [JsonPropertyName("created_at")] public DateTimeOffset CreatedAt { get; set; }
     }
 }
-
-
-

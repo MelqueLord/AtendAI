@@ -34,6 +34,7 @@ public interface IConversationService
     Task<List<ConversationResponse>> GetConversationsAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<ConversationResponse?> GetConversationByIdAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default);
     Task<OutgoingMessageResponse> HandleIncomingAsync(Guid tenantId, IncomingMessageRequest request, Guid? channelId = null, string transport = "meta", CancellationToken cancellationToken = default);
+    Task HandleAutomaticReplyDeliveryFailureAsync(Guid tenantId, Guid conversationId, string status, string? error, CancellationToken cancellationToken = default);
     Task<SyncWhatsAppWebHistoryResponse> ImportWhatsAppWebHistoryAsync(Guid tenantId, SyncWhatsAppWebHistoryRequest request, CancellationToken cancellationToken = default);
     Task<OutboundConversationResponse> StartOutboundConversationAsync(Guid tenantId, OutboundConversationRequest request, CancellationToken cancellationToken = default);
     Task<HumanReplyDispatchResponse?> SendHumanReplyAsync(Guid tenantId, Guid conversationId, string message, CancellationToken cancellationToken = default);
@@ -84,7 +85,7 @@ public interface ITenantWhatsAppService
     Task<Guid?> ResolveTenantIdByPhoneNumberIdAsync(string phoneNumberId, CancellationToken cancellationToken = default);
     Task<WhatsAppChannelResponse?> GetChannelByPhoneNumberIdAsync(Guid tenantId, string phoneNumberId, CancellationToken cancellationToken = default);
     Task<Guid?> ResolveTenantIdByVerifyTokenAsync(string verifyToken, CancellationToken cancellationToken = default);
-    Task<WhatsAppSendResult> SendMessageAsync(Guid tenantId, Guid? conversationId, string toPhone, string message, CancellationToken cancellationToken = default, Guid? channelId = null);
+    Task<WhatsAppSendResult> SendMessageAsync(Guid tenantId, Guid? conversationId, string toPhone, string message, CancellationToken cancellationToken = default, Guid? channelId = null, string? preferredTransport = null);
     Task<List<WhatsAppMessageLogResponse>> GetLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default);
     Task<int> GetAllowedChannelsAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<MetaWhatsAppSetupResponse> GetMetaSetupAsync(Guid tenantId, string? publicBaseUrl, CancellationToken cancellationToken = default);
