@@ -1,92 +1,118 @@
-ï»¿# Atend.AI (Multi-tenant para qualquer negocio)
+# Atend.AI
 
-Plataforma de atendimento automatizado com IA, handoff para humano e dashboard operacional.
+Plataforma multi-tenant de atendimento com IA, handoff humano, CRM, billing e operacao de canais WhatsApp.
 
-## O que mudou nesta versao
+## Stack
 
-- Dominio refatorado para qualquer segmento (nao apenas clinicas)
-- Isolamento por tenant (`tenant_id`) em login, conversas, treinamento, settings e analytics
-- Banco recriado do zero com script de reset completo
-- Dados de exemplo com 2 negocios (Automotivo e Fitness)
+- Backend: ASP.NET 8 com camadas `API`, `Application`, `Domain` e `Infrastructure`
+- Frontend: React 18, TypeScript, Vite e Tailwind CSS
+- Banco: Supabase
+- Integracoes: WhatsApp Cloud API, Groq e bridge QR em Node.js
 
-## Banco (reset total)
+## Estrutura do repositorio
 
-Execute no Supabase SQL Editor:
-
-- [schema.sql](/home/lordelo/Documentos/AtendAI/Atendai.Infrastructure/Data/Supabase/schema.sql)
-
-Esse script:
-
-- derruba tabelas antigas
-- recria modelo multi-tenant
-- insere dados de exemplo prontos para teste
-
-## Credenciais de exemplo
-
-Senha para todos: `Admin@123`
-
-- `admin@autoprime.com` (Admin)
-- `suporte@autoprime.com` (Agent)
-- `admin@studiozen.com` (Admin)
-- `suporte@studiozen.com` (Agent)
-
-## Tenant default para testes sem login (simulate/webhook)
-
-Em [appsettings.json](/home/lordelo/Documentos/AtendAI/Atendai.API/appsettings.json):
-
-- `MultiTenant:DefaultTenantId = 11111111-1111-1111-1111-111111111111`
-
-Voce pode sobrescrever por header `X-Tenant-Id`.
-
-## Rodando
-
-API:
-
-```bash
-cd /home/lordelo/Documentos/AtendAI
-./scripts/run-api.sh
+```text
+Atendai.API/             API HTTP + SignalR
+Atendai.Application/     Casos de uso e regras de negocio
+Atendai.Domain/          Entidades e contratos de dominio
+Atendai.Infrastructure/  Supabase, integrações externas e workers
+Atendai.Web/             Frontend React
+whatsapp-web-bridge/     Bridge QR experimental
+scripts/                 Scripts auxiliares para build e execucao
 ```
 
-Web:
+## Documentacao principal
+
+- Produto e regras: [docs/MANUAL_DO_SISTEMA.md](docs/MANUAL_DO_SISTEMA.md)
+- Arquitetura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Guia tecnico do backend: [docs/BACKEND_ENGINEERING_GUIDE.md](docs/BACKEND_ENGINEERING_GUIDE.md)
+- CI do backend: [.github/workflows/backend-quality.yml](.github/workflows/backend-quality.yml)
+- Schema do banco: [Atendai.Infrastructure/Data/Supabase/schema.sql](Atendai.Infrastructure/Data/Supabase/schema.sql)
+
+## Como rodar localmente
+
+### Backend
+
+Com o .NET 8 instalado:
+
+```bash
+dotnet build Atendai.API/Atendai.API.csproj
+dotnet run --project Atendai.API/Atendai.API.csproj
+```
+
+A API sobe por padrao em `http://localhost:5155` no ambiente de desenvolvimento.
+
+Se preferir usar os scripts do projeto:
+
+```bash
+bash ./scripts/build-api.sh
+bash ./scripts/run-api.sh
+```
+
+Testes uteis do backend:
+
+```bash
+dotnet test Atendai.Domain.Tests/Atendai.Domain.Tests.csproj
+dotnet test Atendai.Application.Tests/Atendai.Application.Tests.csproj
+```
+
+### Frontend
 
 ```bash
 cd Atendai.Web
+npm install
 npm run dev
 ```
 
-Bridge QR experimental:
+Scripts uteis no frontend:
+
+```bash
+npm run typecheck
+npm run build
+npm run check
+```
+
+### Bridge QR experimental
 
 ```bash
 cd whatsapp-web-bridge
 npm install
-export BACKEND_CALLBACK_BASE_URL=http://localhost:5155
 node server.mjs
 ```
 
-## Novos fluxos de WhatsApp
+## Configuracao
 
-- Meta oficial: o frontend agora suporta Embedded Signup da Meta. Preencha em `Atendai.API/appsettings.json`:
-  - `MetaEmbeddedSignup:AppId`
-  - `MetaEmbeddedSignup:AppSecret`
-  - `MetaEmbeddedSignup:ConfigurationId`
-- QR experimental: o backend agora consegue falar com uma bridge Node separada. Em `Atendai.API/appsettings.Development.json`:
-  - `WhatsAppWebBridge:BaseUrl = http://localhost:3011`
-  - `WhatsAppWebBridge:ApiKey` opcional
+Antes de rodar, ajuste as configuracoes locais da API com suas credenciais:
 
-## Build local
+- `Atendai.API/appsettings.json`
+- `Atendai.API/appsettings.Development.json`
 
-- API: `./scripts/build-api.sh`
-- Web: `npm run build`
+Os arquivos de configuracao locais estao ignorados pelo Git.
 
-`./scripts/run-api.sh` escolhe automaticamente um `dotnet` com runtime `.NET 8`.
+## Dados de desenvolvimento
 
-## SuperAdmin e Switch de Tenant
+O script [schema.sql](Atendai.Infrastructure/Data/Supabase/schema.sql) recria o banco e insere dados de exemplo para testes locais.
 
-Credencial de exemplo:
-- superadmin@atend.ai / Admin@123
+Credenciais seed atuais:
 
-Endpoints:
-- GET /api/admin/tenants (role SuperAdmin)
-- POST /api/auth/switch-tenant (role SuperAdmin)
+- `superadmin@atend.ai` / `Admin@123`
+- `admin@autoprime.com` / `Admin@123`
+- `suporte@autoprime.com` / `Admin@123`
+- `admin@studiozen.com` / `Admin@123`
+- `suporte@studiozen.com` / `Admin@123`
 
-O frontend mostra um seletor de tenant no topo quando o usuario logado tem role SuperAdmin.
+## Estado atual do frontend
+
+O frontend esta em processo de desacoplamento por dominio. A organizacao principal hoje segue esta ideia:
+
+- `src/app`: composicao da aplicacao, providers, shell e sessao
+- `src/features`: telas e services por dominio
+- `src/shared`: tipos, utilitarios e componentes reutilizaveis
+- `src/infrastructure`: cliente HTTP, realtime e configuracao
+
+## Qualidade
+
+O projeto hoje usa verificacao estaticas no frontend via TypeScript estrito. O proximo passo natural de maturidade e ampliar a cobertura com testes automatizados por dominio.
+
+
+

@@ -1,18 +1,15 @@
 using System.Collections.Concurrent;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Atendai.Application.DTOs;
 using Atendai.Application.Interfaces;
 using Atendai.Application.Interfaces.Repositories;
 using Atendai.Application.Support;
-using Microsoft.IdentityModel.Tokens;
 
 namespace Atendai.Application.Services;
 
 public sealed class AuthService(
-    IConfiguration configuration,
+    IAuthTokenIssuer authTokenIssuer,
     IAuthRepository authRepository,
     ITenantRepository tenantRepository) : IAuthService
 {
@@ -109,7 +106,7 @@ public sealed class AuthService(
 
     private async Task<AuthResponse> BuildAuthResponseAsync(Guid userId, string email, string name, string role, Guid tenantId, string tenantName, CancellationToken cancellationToken)
     {
-        var (accessToken, expiresAtUtc) = GenerateAccessToken(userId, tenantId, email, name, role);
+        var accessToken = authTokenIssuer.Issue(new AuthTokenDescriptor(userId, tenantId, email, name, role));
 
         var refreshToken = GenerateRefreshToken();
         var refreshHash = HashRefreshToken(refreshToken);
@@ -117,37 +114,7 @@ public sealed class AuthService(
 
         await authRepository.CreateRefreshSessionAsync(userId, tenantId, refreshHash, refreshExpires, cancellationToken);
 
-        return new AuthResponse(accessToken, refreshToken, expiresAtUtc, name, role, tenantId, tenantName);
-    }
-
-    private (string Token, DateTimeOffset ExpiresAtUtc) GenerateAccessToken(Guid userId, Guid tenantId, string email, string name, string role)
-    {
-        var key = configuration["Jwt:Key"] ?? "change-this-key-in-production-at-least-32-chars";
-        var issuer = configuration["Jwt:Issuer"] ?? "AiAtendente";
-        var audience = configuration["Jwt:Audience"] ?? "AiAtendenteClient";
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(30);
-
-        var credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-            SecurityAlgorithms.HmacSha256);
-
-        var claims = new List<Claim>
-        {
-            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new(JwtRegisteredClaimNames.Email, email),
-            new(ClaimTypes.Name, name),
-            new(ClaimTypes.Role, role),
-            new("tenant_id", tenantId.ToString())
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            expires: expiresAt.UtcDateTime,
-            signingCredentials: credentials);
-
-        return (new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
+        return new AuthResponse(accessToken.Token, refreshToken, accessToken.ExpiresAtUtc, name, role, tenantId, tenantName);
     }
 
     private static string GenerateRefreshToken()

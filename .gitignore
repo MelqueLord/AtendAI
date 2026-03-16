@@ -1,4 +1,4 @@
-﻿# .NET
+# .NET
 bin/
 obj/
 **/bin/
@@ -29,3 +29,9 @@ Atendai.API/appsettings.json
 .dotnet/
 whatsapp-web-bridge/data/
 .fake
+
+# TypeScript
+*.tsbuildinfo
+
+
+TestResults/

@@ -43,19 +43,8 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var result = await tenantWhatsAppService.CompleteEmbeddedSignupAsync(tenantId.Value, request, cancellationToken);
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao concluir o cadastro incorporado da Meta: {ex.Message}");
-        }
+        var result = await tenantWhatsAppService.CompleteEmbeddedSignupAsync(tenantId.Value, request, cancellationToken);
+        return Ok(result);
     }
 
     [HttpPost("whatsapp/meta/bootstrap")]
@@ -67,39 +56,21 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var result = await tenantWhatsAppService.BootstrapMetaChannelAsync(tenantId.Value, request, cancellationToken);
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao preparar integracao Meta: {ex.Message}");
-        }
+        var result = await tenantWhatsAppService.BootstrapMetaChannelAsync(tenantId.Value, request, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("whatsapp")]
     public async Task<IActionResult> GetWhatsApp(CancellationToken cancellationToken)
     {
-        try
+        var tenantId = User.GetTenantId();
+        if (tenantId is null)
         {
-            var tenantId = User.GetTenantId();
-            if (tenantId is null)
-            {
-                return Unauthorized(new { message = "Tenant nao identificado." });
-            }
+            return Unauthorized(new { message = "Tenant nao identificado." });
+        }
 
-            var config = await tenantWhatsAppService.GetConnectionAsync(tenantId.Value, cancellationToken);
-            return Ok(config);
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao obter configuracao WhatsApp: {ex.Message}");
-        }
+        var config = await tenantWhatsAppService.GetConnectionAsync(tenantId.Value, cancellationToken);
+        return Ok(config);
     }
 
     [HttpGet("whatsapp/channels")]
@@ -123,26 +94,19 @@ public sealed class EngagementController(
     [HttpPut("whatsapp")]
     public async Task<IActionResult> UpsertWhatsApp([FromBody] UpsertWhatsAppConnectionRequest request, CancellationToken cancellationToken)
     {
-        try
+        if (string.IsNullOrWhiteSpace(request.PhoneNumberId) || string.IsNullOrWhiteSpace(request.VerifyToken))
         {
-            if (string.IsNullOrWhiteSpace(request.PhoneNumberId) || string.IsNullOrWhiteSpace(request.VerifyToken))
-            {
-                return BadRequest(new { message = "PhoneNumberId e VerifyToken sao obrigatorios." });
-            }
-
-            var tenantId = User.GetTenantId();
-            if (tenantId is null)
-            {
-                return Unauthorized(new { message = "Tenant nao identificado." });
-            }
-
-            var updated = await tenantWhatsAppService.UpsertConnectionAsync(tenantId.Value, request, cancellationToken);
-            return Ok(updated);
+            return BadRequest(new { message = "PhoneNumberId e VerifyToken sao obrigatorios." });
         }
-        catch (Exception ex)
+
+        var tenantId = User.GetTenantId();
+        if (tenantId is null)
         {
-            return Problem($"Falha ao salvar configuracao WhatsApp: {ex.Message}");
+            return Unauthorized(new { message = "Tenant nao identificado." });
         }
+
+        var updated = await tenantWhatsAppService.UpsertConnectionAsync(tenantId.Value, request, cancellationToken);
+        return Ok(updated);
     }
 
     [HttpPost("whatsapp/channels")]
@@ -159,15 +123,8 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var created = await tenantWhatsAppService.CreateChannelAsync(tenantId.Value, request, cancellationToken);
-            return Ok(created);
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao criar canal WhatsApp: {ex.Message}");
-        }
+        var created = await tenantWhatsAppService.CreateChannelAsync(tenantId.Value, request, cancellationToken);
+        return Ok(created);
     }
 
     [HttpPut("whatsapp/channels/{channelId:guid}")]
@@ -184,15 +141,8 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var updated = await tenantWhatsAppService.UpdateChannelAsync(tenantId.Value, channelId, request, cancellationToken);
-            return updated is null ? NotFound(new { message = "Canal nao encontrado." }) : Ok(updated);
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao atualizar canal WhatsApp: {ex.Message}");
-        }
+        var updated = await tenantWhatsAppService.UpdateChannelAsync(tenantId.Value, channelId, request, cancellationToken);
+        return updated is null ? NotFound(new { message = "Canal nao encontrado." }) : Ok(updated);
     }
 
     [HttpDelete("whatsapp/channels/{channelId:guid}")]
@@ -224,21 +174,14 @@ public sealed class EngagementController(
     [HttpPost("whatsapp/test")]
     public async Task<IActionResult> TestWhatsApp(CancellationToken cancellationToken)
     {
-        try
+        var tenantId = User.GetTenantId();
+        if (tenantId is null)
         {
-            var tenantId = User.GetTenantId();
-            if (tenantId is null)
-            {
-                return Unauthorized(new { message = "Tenant nao identificado." });
-            }
+            return Unauthorized(new { message = "Tenant nao identificado." });
+        }
 
-            var result = await tenantWhatsAppService.TestConnectionAsync(tenantId.Value, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return Problem($"Falha ao testar WhatsApp: {ex.Message}");
-        }
+        var result = await tenantWhatsAppService.TestConnectionAsync(tenantId.Value, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("whatsapp/web/session")]

@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="Entities/**/*.cs" />
+    <Compile Include="Rules/**/*.cs" />
   </ItemGroup>
 
 </Project>

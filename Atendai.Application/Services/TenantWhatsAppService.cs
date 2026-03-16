@@ -1,11 +1,9 @@
 using Atendai.Application.Interfaces;
 using Atendai.Application.DTOs;
+using Atendai.Application.Exceptions;
 using Atendai.Application.Interfaces.Repositories;
 using Atendai.Application.Support;
 using Atendai.Domain.Entities;
-using System.Security.Cryptography;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Atendai.Application.Services;
 
@@ -15,22 +13,22 @@ public sealed class TenantWhatsAppService(
     IConversationRepository conversationRepository,
     ISecretProtector protector,
     IWhatsAppGateway whatsAppCloudService,
-    IConfiguration configuration,
-    IHttpClientFactory httpClientFactory,
+    IWhatsAppPlatformSettings platformSettings,
+    IMetaEmbeddedSignupGateway metaEmbeddedSignupGateway,
     IWhatsAppWebSessionService whatsAppWebSessionService) : ITenantWhatsAppService
 {
-    private string ApiVersion => configuration["WhatsApp:ApiVersion"] ?? "v22.0";
-    private string MetaGraphApiVersion => configuration["MetaEmbeddedSignup:GraphApiVersion"] ?? ApiVersion;
+    private string ApiVersion => platformSettings.ApiVersion;
+    private string MetaGraphApiVersion => platformSettings.MetaGraphApiVersion;
 
     public async Task<WhatsAppConnectionResponse?> GetConnectionAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        return MapConnection(await whatsAppRepository.GetWhatsAppConnectionAsync(tenantId, cancellationToken));
+        return TenantWhatsAppServiceSupport.MapConnection(await whatsAppRepository.GetWhatsAppConnectionAsync(tenantId, cancellationToken));
     }
 
     public async Task<List<WhatsAppChannelResponse>> GetChannelsAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         var channels = await whatsAppRepository.GetWhatsAppChannelsAsync(tenantId, cancellationToken);
-        return channels.Select(MapChannel).OfType<WhatsAppChannelResponse>().ToList();
+        return channels.Select(TenantWhatsAppServiceSupport.MapChannel).OfType<WhatsAppChannelResponse>().ToList();
     }
 
     public async Task<WhatsAppConnectionResponse> UpsertConnectionAsync(Guid tenantId, UpsertWhatsAppConnectionRequest request, CancellationToken cancellationToken = default)
@@ -56,7 +54,7 @@ public sealed class TenantWhatsAppService(
             encryptedToken,
             request.IsActive,
             cancellationToken);
-        return MapConnection(connection)!;
+        return TenantWhatsAppServiceSupport.MapConnection(connection)!;
     }
 
     public async Task<WhatsAppChannelResponse> CreateChannelAsync(Guid tenantId, UpsertWhatsAppChannelRequest request, CancellationToken cancellationToken = default)
@@ -78,7 +76,7 @@ public sealed class TenantWhatsAppService(
             request.IsActive,
             request.IsPrimary,
             cancellationToken);
-        return MapChannel(channel)!;
+        return TenantWhatsAppServiceSupport.MapChannel(channel)!;
     }
 
     public async Task<WhatsAppChannelResponse?> UpdateChannelAsync(Guid tenantId, Guid channelId, UpsertWhatsAppChannelRequest request, CancellationToken cancellationToken = default)
@@ -100,7 +98,7 @@ public sealed class TenantWhatsAppService(
             request.IsActive,
             request.IsPrimary,
             cancellationToken);
-        return MapChannel(channel);
+        return TenantWhatsAppServiceSupport.MapChannel(channel);
     }
 
     public Task<bool> DeleteChannelAsync(Guid tenantId, Guid channelId, CancellationToken cancellationToken = default)
@@ -141,7 +139,7 @@ public sealed class TenantWhatsAppService(
 
     public async Task<WhatsAppChannelResponse?> GetChannelByPhoneNumberIdAsync(Guid tenantId, string phoneNumberId, CancellationToken cancellationToken = default)
     {
-        return MapChannel(await whatsAppRepository.GetWhatsAppChannelByPhoneNumberIdAsync(tenantId, phoneNumberId, cancellationToken));
+        return TenantWhatsAppServiceSupport.MapChannel(await whatsAppRepository.GetWhatsAppChannelByPhoneNumberIdAsync(tenantId, phoneNumberId, cancellationToken));
     }
 
     public Task<Guid?> ResolveTenantIdByVerifyTokenAsync(string verifyToken, CancellationToken cancellationToken = default)
@@ -160,8 +158,8 @@ public sealed class TenantWhatsAppService(
         var conversationTransport = conversationId.HasValue
             ? await conversationRepository.GetConversationTransportAsync(tenantId, conversationId.Value, cancellationToken)
             : null;
-        var targetTransport = NormalizeTransport(preferredTransport)
-            ?? NormalizeTransport(conversationTransport);
+        var targetTransport = TenantWhatsAppServiceSupport.NormalizeTransport(preferredTransport)
+            ?? TenantWhatsAppServiceSupport.NormalizeTransport(conversationTransport);
 
         if (string.Equals(targetTransport, "qr", StringComparison.OrdinalIgnoreCase))
         {
@@ -197,7 +195,7 @@ public sealed class TenantWhatsAppService(
             return qrFallback;
         }
 
-        var notConfigured = BuildNotConfiguredResult();
+        var notConfigured = TenantWhatsAppServiceSupport.BuildNotConfiguredResult();
         await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, notConfigured, message, cancellationToken);
         return notConfigured;
     }
@@ -205,7 +203,7 @@ public sealed class TenantWhatsAppService(
     public async Task<List<WhatsAppMessageLogResponse>> GetLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default)
     {
         var logs = await whatsAppRepository.GetWhatsAppMessageLogsAsync(tenantId, limit, cancellationToken);
-        return logs.Select(MapLog).ToList();
+        return logs.Select(TenantWhatsAppServiceSupport.MapLog).ToList();
     }
 
     public async Task<int> GetAllowedChannelsAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -219,7 +217,7 @@ public sealed class TenantWhatsAppService(
     {
         var channels = await whatsAppRepository.GetWhatsAppChannelsAsync(tenantId, cancellationToken);
         var channel = channels.FirstOrDefault(current => current.IsPrimary) ?? channels.FirstOrDefault();
-        var callbackUrl = BuildWebhookUrl(publicBaseUrl);
+        var callbackUrl = TenantWhatsAppServiceSupport.BuildWebhookUrl(publicBaseUrl, platformSettings);
 
         var isReady = channel is not null
             && channel.IsActive
@@ -246,7 +244,7 @@ public sealed class TenantWhatsAppService(
     {
         if (string.IsNullOrWhiteSpace(request.PhoneNumberId) || string.IsNullOrWhiteSpace(request.AccessToken))
         {
-            throw new ArgumentException("PhoneNumberId e AccessToken sao obrigatorios.");
+            throw new ApplicationValidationException("PhoneNumberId e AccessToken sao obrigatorios.");
         }
 
         var channels = await whatsAppRepository.GetWhatsAppChannelsAsync(tenantId, cancellationToken);
@@ -256,7 +254,7 @@ public sealed class TenantWhatsAppService(
             ? existing?.DisplayName ?? "WhatsApp principal"
             : request.DisplayName.Trim();
         var verifyToken = string.IsNullOrWhiteSpace(request.VerifyToken)
-            ? (!string.IsNullOrWhiteSpace(existing?.VerifyToken) ? existing.VerifyToken : GenerateVerifyToken())
+            ? (!string.IsNullOrWhiteSpace(existing?.VerifyToken) ? existing.VerifyToken : TenantWhatsAppServiceSupport.GenerateVerifyToken())
             : request.VerifyToken.Trim();
         var upsert = new UpsertWhatsAppChannelRequest(
             displayName,
@@ -275,14 +273,14 @@ public sealed class TenantWhatsAppService(
         else
         {
             channel = await UpdateChannelAsync(tenantId, existing.Id, upsert, cancellationToken)
-                ?? throw new InvalidOperationException("Nao foi possivel atualizar o canal WhatsApp informado.");
+                ?? throw new BusinessRuleViolationException("Nao foi possivel atualizar o canal WhatsApp informado.");
         }
 
         var test = await TestChannelAsync(tenantId, channel.Id, cancellationToken);
         return new MetaWhatsAppBootstrapResponse(
             channel.Id,
             channel.DisplayName,
-            BuildWebhookUrl(request.PublicBaseUrl),
+            TenantWhatsAppServiceSupport.BuildWebhookUrl(request.PublicBaseUrl, platformSettings),
             channel.VerifyToken,
             channel.PhoneNumberId,
             channel.WabaId,
@@ -295,8 +293,8 @@ public sealed class TenantWhatsAppService(
 
     public Task<MetaEmbeddedSignupConfigResponse> GetEmbeddedSignupConfigAsync(CancellationToken cancellationToken = default)
     {
-        var appId = configuration["MetaEmbeddedSignup:AppId"];
-        var configurationId = configuration["MetaEmbeddedSignup:ConfigurationId"];
+        var appId = platformSettings.EmbeddedSignupAppId;
+        var configurationId = platformSettings.EmbeddedSignupConfigurationId;
         var isReady = !string.IsNullOrWhiteSpace(appId) && !string.IsNullOrWhiteSpace(configurationId);
         var error = isReady
             ? null
@@ -314,7 +312,7 @@ public sealed class TenantWhatsAppService(
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            throw new ArgumentException("O code retornado pela Meta e obrigatorio.");
+            throw new ApplicationValidationException("O code retornado pela Meta e obrigatorio.");
         }
 
         if (string.IsNullOrWhiteSpace(request.PhoneNumberId))
@@ -334,7 +332,7 @@ public sealed class TenantWhatsAppService(
                 null);
         }
 
-        var accessToken = await ExchangeEmbeddedSignupCodeAsync(request.Code.Trim(), cancellationToken);
+        var accessToken = await metaEmbeddedSignupGateway.ExchangeCodeAsync(request.Code.Trim(), cancellationToken);
         var bootstrap = await BootstrapMetaChannelAsync(
             tenantId,
             new MetaWhatsAppBootstrapRequest(
@@ -363,38 +361,12 @@ public sealed class TenantWhatsAppService(
             bootstrap.TestError);
     }
 
-    private string BuildWebhookUrl(string? publicBaseUrl)
-    {
-        var normalized = NormalizePublicBaseUrl(publicBaseUrl)
-            ?? NormalizePublicBaseUrl(configuration["PublicApi:BaseUrl"])
-            ?? NormalizePublicBaseUrl(configuration["PublicApi:NgrokUrl"]);
-
-        return string.IsNullOrWhiteSpace(normalized)
-            ? "/api/whatsapp/webhook"
-            : $"{normalized}/api/whatsapp/webhook";
-    }
-
-    private static string? NormalizePublicBaseUrl(string? baseUrl)
-    {
-        if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            return null;
-        }
-
-        return baseUrl.Trim().TrimEnd('/');
-    }
-
-    private static string GenerateVerifyToken()
-    {
-        return Convert.ToHexString(RandomNumberGenerator.GetBytes(18)).ToLowerInvariant();
-    }
-
     private async Task EnsureChannelLimitAsync(Guid tenantId, int currentCount, CancellationToken cancellationToken)
     {
         var allowed = await GetAllowedChannelsAsync(tenantId, cancellationToken);
         if (currentCount >= allowed)
         {
-            throw new InvalidOperationException($"O plano atual permite ate {allowed} canal(is) de WhatsApp.");
+            throw new BusinessRuleViolationException($"O plano atual permite ate {allowed} canal(is) de WhatsApp.");
         }
     }
 
@@ -432,7 +404,7 @@ public sealed class TenantWhatsAppService(
         var credentials = await GetCredentialsAsync(tenantId, cancellationToken, channelId);
         if (credentials is null)
         {
-            return BuildNotConfiguredResult();
+            return TenantWhatsAppServiceSupport.BuildNotConfiguredResult();
         }
 
         return await whatsAppCloudService.SendTextMessageWithCredentialsAsync(
@@ -467,123 +439,10 @@ public sealed class TenantWhatsAppService(
         return new WhatsAppSendResult
         {
             Success = qrSend.Success,
-            Status = qrSend.Success ? "sent_qr" : NormalizeQrStatus(qrSend.Status),
+            Status = qrSend.Success ? "sent_qr" : TenantWhatsAppServiceSupport.NormalizeQrStatus(qrSend.Status),
             Error = qrSend.Success ? null : qrSend.Message
         };
     }
-
-    private static WhatsAppSendResult BuildNotConfiguredResult()
-    {
-        return new WhatsAppSendResult
-        {
-            Success = false,
-            Status = "not_configured",
-            Error = "WhatsApp nao configurado para este tenant."
-        };
-    }
-
-    private static string? NormalizeTransport(string? transport)
-    {
-        if (string.IsNullOrWhiteSpace(transport))
-        {
-            return null;
-        }
-
-        return transport.Trim().ToLowerInvariant();
-    }
-
-    private static string NormalizeQrStatus(string? status)
-    {
-        if (string.IsNullOrWhiteSpace(status))
-        {
-            return "error_qr";
-        }
-
-        return status.Contains("qr", StringComparison.OrdinalIgnoreCase)
-            ? status
-            : $"{status}_qr";
-    }
-
-    private async Task<string> ExchangeEmbeddedSignupCodeAsync(string code, CancellationToken cancellationToken)
-    {
-        var appId = configuration["MetaEmbeddedSignup:AppId"];
-        var appSecret = configuration["MetaEmbeddedSignup:AppSecret"];
-
-        if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(appSecret))
-        {
-            throw new InvalidOperationException("Configure MetaEmbeddedSignup:AppId e MetaEmbeddedSignup:AppSecret para trocar o code da Meta.");
-        }
-
-        var client = httpClientFactory.CreateClient();
-        var endpoint = $"https://graph.facebook.com/{MetaGraphApiVersion}/oauth/access_token?client_id={Uri.EscapeDataString(appId)}&client_secret={Uri.EscapeDataString(appSecret)}&code={Uri.EscapeDataString(code)}";
-
-        using var response = await client.GetAsync(endpoint, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"A Meta recusou a troca do code. Status {(int)response.StatusCode}: {body}");
-        }
-
-        var payload = JsonSerializer.Deserialize<MetaAccessTokenResponse>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        if (string.IsNullOrWhiteSpace(payload?.AccessToken))
-        {
-            throw new InvalidOperationException("A Meta nao retornou access_token na troca do code.");
-        }
-
-        return payload.AccessToken;
-    }
-
-    private static WhatsAppConnectionResponse? MapConnection(WhatsAppConnection? connection)
-    {
-        return connection is null
-            ? null
-            : new WhatsAppConnectionResponse(
-                connection.TenantId,
-                connection.WabaId,
-                connection.PhoneNumberId,
-                connection.VerifyToken,
-                connection.IsActive,
-                connection.LastTestedAt,
-                connection.LastStatus,
-                connection.LastError,
-                connection.UpdatedAt);
-    }
-
-    private static WhatsAppChannelResponse? MapChannel(WhatsAppChannel? channel)
-    {
-        return channel is null
-            ? null
-            : new WhatsAppChannelResponse(
-                channel.Id,
-                channel.TenantId,
-                channel.DisplayName,
-                channel.WabaId,
-                channel.PhoneNumberId,
-                channel.VerifyToken,
-                channel.IsActive,
-                channel.IsPrimary,
-                channel.LastTestedAt,
-                channel.LastStatus,
-                channel.LastError,
-                channel.UpdatedAt);
-    }
-
-    private static WhatsAppMessageLogResponse MapLog(WhatsAppMessageLog log)
-    {
-        return new WhatsAppMessageLogResponse(
-            log.Id,
-            log.TenantId,
-            log.ConversationId,
-            log.ToPhone,
-            log.Direction,
-            log.Status,
-            log.ErrorDetail,
-            log.CreatedAt);
-    }
-
-    private sealed class MetaAccessTokenResponse
-    {
-        [JsonPropertyName("access_token")]
-        public string? AccessToken { get; set; }
-    }
 }
+
+

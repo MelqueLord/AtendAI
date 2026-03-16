@@ -48,15 +48,8 @@ public sealed class ConversationsController(IConversationService conversationSer
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var updated = await conversationService.UpdateAssignmentAsync(tenantId.Value, conversationId, request.AssignedUserId, cancellationToken);
-            return updated is null ? NotFound(new { message = "Conversa nao encontrada." }) : Ok(updated);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var updated = await conversationService.UpdateAssignmentAsync(tenantId.Value, conversationId, request.AssignedUserId, cancellationToken);
+        return updated is null ? NotFound(new { message = "Conversa nao encontrada." }) : Ok(updated);
     }
 
     [HttpPatch("{conversationId:guid}/status")]
@@ -69,26 +62,8 @@ public sealed class ConversationsController(IConversationService conversationSer
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var currentConversation = await conversationService.GetConversationByIdAsync(tenantId.Value, conversationId, cancellationToken);
-            if (currentConversation is null)
-            {
-                return NotFound(new { message = "Conversa nao encontrada." });
-            }
-
-            if (!IsAllowedTransition(currentConversation.Status, request.Status))
-            {
-                return BadRequest(new { message = "Transicao de status nao permitida para o estado atual da conversa." });
-            }
-
-            var updated = await conversationService.UpdateStatusAsync(tenantId.Value, conversationId, request.Status, cancellationToken);
-            return updated is null ? NotFound(new { message = "Conversa nao encontrada." }) : Ok(updated);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var updated = await conversationService.UpdateStatusAsync(tenantId.Value, conversationId, request.Status, cancellationToken);
+        return updated is null ? NotFound(new { message = "Conversa nao encontrada." }) : Ok(updated);
     }
 
     [HttpGet("{conversationId:guid}/notes")]
@@ -207,62 +182,15 @@ public sealed class ConversationsController(IConversationService conversationSer
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
+        var result = await conversationService.StartOutboundConversationAsync(tenantId.Value, request, cancellationToken);
+        if (!result.Delivered)
         {
-            var result = await conversationService.StartOutboundConversationAsync(tenantId.Value, request, cancellationToken);
-            if (!result.Delivered)
-            {
-                return Conflict(new { message = result.Error ?? result.Message, status = result.Status, conversationId = result.ConversationId });
-            }
+            return Conflict(new { message = result.Error ?? result.Message, status = result.Status, conversationId = result.ConversationId });
+        }
 
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        return Ok(result);
     }
 
-    private static bool IsAllowedTransition(string currentStatus, string nextStatus)
-    {
-        var current = NormalizeStatus(currentStatus);
-        var next = NormalizeStatus(nextStatus);
-
-        if (current == next)
-        {
-            return true;
-        }
-
-        return current switch
-        {
-            "BotHandling" => next is "WaitingHuman" or "HumanHandling" or "Closed",
-            "WaitingHuman" => next is "BotHandling" or "HumanHandling" or "Closed",
-            "HumanHandling" => next is "BotHandling" or "WaitingHuman" or "Closed",
-            "Closed" => next is "BotHandling" or "HumanHandling",
-            _ => false
-        };
-    }
-
-    private static string NormalizeStatus(string status)
-    {
-        var value = status.Trim();
-        if (value.Equals("WaitingHuman", StringComparison.OrdinalIgnoreCase))
-        {
-            return "WaitingHuman";
-        }
-
-        if (value.Equals("HumanHandling", StringComparison.OrdinalIgnoreCase))
-        {
-            return "HumanHandling";
-        }
-
-        if (value.Equals("Closed", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Closed";
-        }
-
-        return "BotHandling";
-    }
     [HttpPost("{conversationId:guid}/human-reply")]
     [Authorize(Roles = "Admin,Agent,SuperAdmin")]
     public async Task<IActionResult> HumanReply(Guid conversationId, [FromBody] HumanReplyRequest request, CancellationToken cancellationToken)

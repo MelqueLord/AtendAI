@@ -1,0 +1,51 @@
+name: Backend Quality
+
+on:
+  pull_request:
+    paths:
+      - "Atendai.API/**"
+      - "Atendai.Application/**"
+      - "Atendai.Domain/**"
+      - "Atendai.Infrastructure/**"
+      - "Atendai.Application.Tests/**"
+      - "Atendai.Domain.Tests/**"
+      - "Atendai.sln"
+      - ".github/workflows/backend-quality.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "Atendai.API/**"
+      - "Atendai.Application/**"
+      - "Atendai.Domain/**"
+      - "Atendai.Infrastructure/**"
+      - "Atendai.Application.Tests/**"
+      - "Atendai.Domain.Tests/**"
+      - "Atendai.sln"
+      - ".github/workflows/backend-quality.yml"
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Atendai.sln
+
+      - name: Build
+        run: dotnet build Atendai.sln --no-restore --configuration Release
+
+      - name: Test Domain
+        run: dotnet test Atendai.Domain.Tests/Atendai.Domain.Tests.csproj --no-build --configuration Release
+
+      - name: Test Application
+        run: dotnet test Atendai.Application.Tests/Atendai.Application.Tests.csproj --no-build --configuration Release

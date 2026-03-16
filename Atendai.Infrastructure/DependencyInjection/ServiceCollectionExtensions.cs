@@ -27,7 +27,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInboxRepository, SupabaseInboxRepository>();
         services.AddHttpClient<IWhatsAppGateway, WhatsAppCloudService>();
         services.AddHttpClient<IChatCompletionService, GroqChatService>();
+        services.AddScoped<IMetaEmbeddedSignupGateway, MetaEmbeddedSignupGateway>();
         services.AddScoped<IWhatsAppWebSessionService, WhatsAppWebSessionService>();
+        services.AddSingleton<IAuthTokenIssuer, JwtAccessTokenIssuer>();
+        services.AddSingleton<IWhatsAppPlatformSettings, WhatsAppPlatformSettings>();
         services.AddSingleton<ISecretProtector, SecretProtectorService>();
         services.AddSingleton<INotificationDispatcher, NotificationService>();
         services.AddHostedService<CampaignJobsWorker>();

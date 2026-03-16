@@ -32,30 +32,16 @@ public sealed class ManagementController(IManagementService managementService) :
     [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> CreateCompany([FromBody] CompanyUpsertRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var created = await managementService.CreateCompanyAsync(request, cancellationToken);
-            return CreatedAtAction(nameof(GetCompanyById), new { companyId = created.Id }, created);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var created = await managementService.CreateCompanyAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(GetCompanyById), new { companyId = created.Id }, created);
     }
 
     [HttpPut("companies/{companyId:guid}")]
     [Authorize(Roles = "SuperAdmin")]
     public async Task<IActionResult> UpdateCompany(Guid companyId, [FromBody] CompanyUpsertRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var updated = await managementService.UpdateCompanyAsync(companyId, request, cancellationToken);
-            return updated is null ? NotFound(new { message = "Empresa nao encontrada." }) : Ok(updated);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var updated = await managementService.UpdateCompanyAsync(companyId, request, cancellationToken);
+        return updated is null ? NotFound(new { message = "Empresa nao encontrada." }) : Ok(updated);
     }
 
     [HttpDelete("companies/{companyId:guid}")]
@@ -96,15 +82,8 @@ public sealed class ManagementController(IManagementService managementService) :
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var user = await managementService.GetUserByIdAsync(currentTenantId.Value, role, userId, cancellationToken);
-            return user is null ? NotFound(new { message = "Usuario nao encontrado." }) : Ok(user);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var user = await managementService.GetUserByIdAsync(currentTenantId.Value, role, userId, cancellationToken);
+        return user is null ? NotFound(new { message = "Usuario nao encontrado." }) : Ok(user);
     }
 
     [HttpPost("users")]
@@ -117,19 +96,8 @@ public sealed class ManagementController(IManagementService managementService) :
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var created = await managementService.CreateUserAsync(currentTenantId.Value, role, request, cancellationToken);
-            return CreatedAtAction(nameof(GetUserById), new { userId = created.Id }, created);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var created = await managementService.CreateUserAsync(currentTenantId.Value, role, request, cancellationToken);
+        return CreatedAtAction(nameof(GetUserById), new { userId = created.Id }, created);
     }
 
     [HttpPut("users/{userId:guid}")]
@@ -142,19 +110,8 @@ public sealed class ManagementController(IManagementService managementService) :
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        try
-        {
-            var updated = await managementService.UpdateUserAsync(currentTenantId.Value, role, userId, request, cancellationToken);
-            return updated is null ? NotFound(new { message = "Usuario nao encontrado." }) : Ok(updated);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var updated = await managementService.UpdateUserAsync(currentTenantId.Value, role, userId, request, cancellationToken);
+        return updated is null ? NotFound(new { message = "Usuario nao encontrado." }) : Ok(updated);
     }
 
     [HttpDelete("users/{userId:guid}")]
@@ -168,18 +125,7 @@ public sealed class ManagementController(IManagementService managementService) :
             return Unauthorized(new { message = "Contexto de usuario invalido." });
         }
 
-        try
-        {
-            var deleted = await managementService.DeleteUserAsync(currentTenantId.Value, currentUserId.Value, role, userId, cancellationToken);
-            return deleted ? NoContent() : NotFound(new { message = "Usuario nao encontrado." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var deleted = await managementService.DeleteUserAsync(currentTenantId.Value, currentUserId.Value, role, userId, cancellationToken);
+        return deleted ? NoContent() : NotFound(new { message = "Usuario nao encontrado." });
     }
 }

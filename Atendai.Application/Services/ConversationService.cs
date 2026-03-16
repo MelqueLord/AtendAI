@@ -1,8 +1,10 @@
 using Atendai.Application.Interfaces;
 using Atendai.Application.DTOs;
+using Atendai.Application.Exceptions;
 using Atendai.Application.Interfaces.Repositories;
 using Atendai.Application.Support;
 using Atendai.Domain.Entities;
+using Atendai.Domain.Rules;
 
 namespace Atendai.Application.Services;
 
@@ -192,7 +194,7 @@ public sealed class ConversationService(
     {
         if (string.IsNullOrWhiteSpace(request.CustomerPhone) || string.IsNullOrWhiteSpace(request.Message))
         {
-            throw new ArgumentException("Telefone e mensagem sao obrigatorios.");
+            throw new ApplicationValidationException("Telefone e mensagem sao obrigatorios.");
         }
 
         var customerPhone = PhoneNumberNormalizer.Normalize(request.CustomerPhone);
@@ -254,7 +256,7 @@ public sealed class ConversationService(
             var targetUser = await userRepository.GetManagedUserByIdAsync(assignedUserId.Value, cancellationToken);
             if (targetUser is null || targetUser.TenantId != tenantId)
             {
-                throw new InvalidOperationException("Usuario de atribuicao invalido para este tenant.");
+                throw new BusinessRuleViolationException("Usuario de atribuicao invalido para este tenant.");
             }
         }
 
@@ -266,9 +268,20 @@ public sealed class ConversationService(
 
     public async Task<ConversationResponse?> UpdateStatusAsync(Guid tenantId, Guid conversationId, string status, CancellationToken cancellationToken = default)
     {
-        if (!TryParseStatus(status, out var parsed))
+        if (!ConversationStatusPolicy.TryParse(status, out var parsed))
         {
-            throw new ArgumentException("Status invalido.", nameof(status));
+            throw new ApplicationValidationException("Status invalido.");
+        }
+
+        var currentConversation = await conversationRepository.GetConversationByIdAsync(tenantId, conversationId, cancellationToken);
+        if (currentConversation is null)
+        {
+            return null;
+        }
+
+        if (!ConversationStatusPolicy.CanTransition(currentConversation.Status, parsed))
+        {
+            throw new BusinessRuleViolationException("Transicao de status nao permitida para o estado atual da conversa.");
         }
 
         await inboxRepository.UpdateConversationStatusAsync(tenantId, conversationId, parsed.ToString(), cancellationToken);
@@ -311,14 +324,7 @@ public sealed class ConversationService(
     {
         return inboxRepository.DeleteQuickReplyTemplateAsync(tenantId, templateId, cancellationToken);
     }
-
-    private static bool TryParseStatus(string statusText, out ConversationStatus status)
-    {
-        return Enum.TryParse(statusText, true, out status)
-            && status is ConversationStatus.BotHandling or ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling or ConversationStatus.Closed;
-    }
-
-    private async Task<string> ResolveCustomerNameAsync(Guid tenantId, string customerPhone, string? incomingName, CancellationToken cancellationToken)
+private async Task<string> ResolveCustomerNameAsync(Guid tenantId, string customerPhone, string? incomingName, CancellationToken cancellationToken)
     {
         var existingContact = await contactRepository.FindContactByPhoneAsync(tenantId, customerPhone, cancellationToken);
         return CustomerIdentityResolver.ResolveDisplayName(customerPhone, existingContact?.Name, incomingName);
@@ -374,3 +380,6 @@ public sealed class ConversationService(
         return new QuickReplyTemplateResponse(template.Id, template.TenantId, template.Title, template.Body, template.CreatedAt, template.UpdatedAt);
     }
 }
+
+
+

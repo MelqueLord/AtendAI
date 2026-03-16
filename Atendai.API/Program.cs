@@ -1,5 +1,6 @@
 using System.Text;
 using Atendai.API.Hubs;
+using Atendai.API.Middleware;
 using Atendai.API.Services;
 using Atendai.Application.DependencyInjection;
 using Atendai.Application.Interfaces;
@@ -94,6 +95,7 @@ if (!app.Environment.IsDevelopment() || hasHttpsBinding)
     app.UseHttpsRedirection();
 }
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("frontend");
 app.UseAuthentication();
 app.UseAuthorization();
