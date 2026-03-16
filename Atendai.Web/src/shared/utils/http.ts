@@ -1,4 +1,4 @@
-import { HttpError } from "@infrastructure/http/httpClient";
+﻿import { HttpError } from "@infrastructure/http/httpClient";
 
 type ErrorPayload = {
   message?: string;
@@ -10,8 +10,14 @@ type ErrorPayload = {
 
 export function resolveApiErrorMessage(error: unknown, fallback: string) {
   if (error instanceof HttpError) {
-    const data = error.data as ErrorPayload | null;
-    return data?.message || data?.detail || data?.error || data?.title || fallback;
+    const data = error.data;
+
+    if (typeof data === "string" && data.trim()) {
+      return data.trim();
+    }
+
+    const payload = data as ErrorPayload | null;
+    return payload?.message || payload?.detail || payload?.error || payload?.title || fallback;
   }
 
   if (error instanceof Error && error.message) {

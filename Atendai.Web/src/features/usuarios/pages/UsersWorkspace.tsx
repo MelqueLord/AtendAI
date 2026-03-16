@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import type { ManagedUser, TenantOption } from "@shared/types";
 import {
   EmptyStatePanel,
   MetricTile,
@@ -17,22 +18,6 @@ import {
   tableShellClass,
   workspacePageClass
 } from "@shared/components/WorkspaceUi";
-
-type TenantOption = {
-  id: string;
-  name: string;
-  segment: string;
-};
-
-type ManagedUser = {
-  id: string;
-  tenantId: string;
-  tenantName: string;
-  name: string;
-  email: string;
-  role: string;
-  createdAt: string;
-};
 
 type UserDraft = {
   tenantId: string;
@@ -276,3 +261,5 @@ export function UsersWorkspace({
     </section>
   );
 }
+
+

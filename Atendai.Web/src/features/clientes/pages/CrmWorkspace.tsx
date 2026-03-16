@@ -1,4 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
+import type {
+  AutomationOption,
+  Contact,
+  CustomerFeedback,
+  QueueHealth,
+  ScheduledBroadcast
+} from "@shared/types";
 import {
   EmptyStatePanel,
   MetricTile,
@@ -18,73 +25,6 @@ import {
   textareaClass,
   workspacePageClass
 } from "@shared/components/WorkspaceUi";
-
-
-type Contact = {
-  id: string;
-  name: string;
-  phone: string;
-  state: string | null;
-  status: string | null;
-  tags: string[];
-  ownerName: string | null;
-  createdAt: string;
-};
-
-type ScheduledBroadcast = {
-  id: string;
-  tenantId: string;
-  name: string;
-  messageTemplate: string;
-  scheduledAt: string;
-  status: string;
-  tagFilter: string | null;
-  targetCount: number;
-  deliveredCount: number;
-  createdAt: string;
-};
-
-type QueueAttentionItem = {
-  conversationId: string;
-  customerName: string;
-  customerPhone: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  waitingMinutes: number;
-  firstHumanReplyMinutes: number | null;
-};
-
-type QueueHealth = {
-  unattendedCount: number;
-  averageFirstHumanReplyMinutes: number;
-  averageCustomerRating: number;
-  feedbackCount: number;
-  unattended: QueueAttentionItem[];
-};
-
-type CustomerFeedback = {
-  id: string;
-  conversationId: string;
-  customerName: string;
-  customerPhone: string;
-  rating: number;
-  comment: string | null;
-  createdAt: string;
-};
-
-type AutomationOption = {
-  id: string;
-  tenantId: string;
-  name: string;
-  triggerKeywords: string;
-  responseTemplate: string;
-  escalateToHuman: boolean;
-  sortOrder: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
 
 type ContactDraft = {
   name: string;
@@ -110,6 +50,24 @@ type AutomationDraft = {
   sortOrder: number;
   isActive: boolean;
 };
+
+function broadcastTone(status: string) {
+  const normalizedStatus = status.toUpperCase();
+
+  if (normalizedStatus.includes("ERROR") || normalizedStatus.includes("FAILED")) {
+    return "rose" as const;
+  }
+
+  if (normalizedStatus.includes("PENDING") || normalizedStatus.includes("SCHEDULED")) {
+    return "amber" as const;
+  }
+
+  if (normalizedStatus.includes("DONE") || normalizedStatus.includes("SENT") || normalizedStatus.includes("DELIVERED")) {
+    return "emerald" as const;
+  }
+
+  return "slate" as const;
+}
 
 type CrmWorkspaceProps = {
   contacts: Contact[];
@@ -155,14 +113,6 @@ type CrmWorkspaceProps = {
   openInternalConversation: (contact?: Contact) => void;
   formatDate: (value: string) => string;
 };
-
-function broadcastTone(status: string) {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("fail") || normalized.includes("error")) return "rose" as const;
-  if (normalized.includes("done") || normalized.includes("sent") || normalized.includes("complete")) return "emerald" as const;
-  if (normalized.includes("pending") || normalized.includes("schedule")) return "amber" as const;
-  return "slate" as const;
-}
 
 export function CrmWorkspace({
   contacts,
@@ -552,3 +502,8 @@ export function CrmWorkspace({
     </section>
   );
 }
+
+
+
+
+

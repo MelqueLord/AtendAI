@@ -113,8 +113,6 @@ const primaryCtaClass =
   "inline-flex min-h-[52px] items-center justify-center whitespace-nowrap rounded-full bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_48px_-20px_rgba(34,211,238,0.72)] transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-cyan-200";
 const darkSecondaryCtaClass =
   "inline-flex min-h-[52px] items-center justify-center whitespace-nowrap rounded-full border border-white/14 bg-white/8 px-6 py-3 text-sm font-medium text-white backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-white/12 focus:outline-none focus-visible:ring-4 focus-visible:ring-white/20";
-const lightPrimaryCtaClass =
-  "inline-flex min-h-[52px] items-center justify-center whitespace-nowrap rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_48px_-24px_rgba(15,23,42,0.7)] transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-200";
 const lightSecondaryCtaClass =
   "inline-flex min-h-[52px] items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-200";
 
@@ -416,3 +414,4 @@ export function PricingLanding({ onLoginClick }: PricingLandingProps) {
     </main>
   );
 }
+

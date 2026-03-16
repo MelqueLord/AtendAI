@@ -1,4 +1,4 @@
-export type HttpRequestConfig = {
+﻿export type HttpRequestConfig = {
   path: string;
   init: RequestInit;
   token?: string | null;
@@ -36,5 +36,16 @@ export async function applyResponseInterceptors<T>(response: Response): Promise<
     return null as T;
   }
 
-  return JSON.parse(text) as T;
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  const looksLikeJson = contentType.includes("application/json") || contentType.includes("problem+json");
+
+  if (!looksLikeJson) {
+    return text as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as T;
+  }
 }

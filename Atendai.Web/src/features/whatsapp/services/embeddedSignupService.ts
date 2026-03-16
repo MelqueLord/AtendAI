@@ -196,16 +196,3 @@ function waitForEmbeddedSignupEvent() {
   });
 }
 
-async function extractError(response: Response, fallback: string) {
-  try {
-    const text = await response.text();
-    if (!text) {
-      return fallback;
-    }
-
-    const data = JSON.parse(text) as { message?: string; detail?: string; title?: string };
-    return data.message || data.detail || data.title || fallback;
-  } catch {
-    return fallback;
-  }
-}

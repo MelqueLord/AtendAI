@@ -1,3 +1,4 @@
+import type { BillingPlan, BillingSubscription, TenantOption, ValueMetrics } from "@shared/types";
 import {
   EmptyStatePanel,
   MetricTile,
@@ -10,41 +11,6 @@ import {
   subtlePanelClass,
   workspacePageClass
 } from "@shared/components/WorkspaceUi";
-
-type BillingPlan = {
-  code: string;
-  name: string;
-  monthlyPrice: number;
-  currency: string;
-  includedConversations: number;
-  includedAgents: number;
-  includedWhatsAppNumbers: number;
-  isPopular: boolean;
-};
-
-type BillingSubscription = {
-  tenantId: string;
-  planCode: string;
-  planName: string;
-  status: string;
-  trialEndsAt: string | null;
-  currentPeriodEnd: string | null;
-  updatedAt: string;
-};
-
-type ValueMetrics = {
-  conversations30d: number;
-  humanHandoffs30d: number;
-  automationRate: number;
-  estimatedHoursSaved: number;
-  estimatedRevenueProtected: number;
-};
-
-type TenantOption = {
-  id: string;
-  name: string;
-  segment: string;
-};
 
 type CommercialWorkspaceProps = {
   billingSubscription: BillingSubscription | null;
@@ -237,3 +203,5 @@ export function CommercialWorkspace({
     </section>
   );
 }
+
+

@@ -1,5 +1,5 @@
 import { api } from "@infrastructure/http/api";
-import type { CampaignRule, WhatsAppChannel, WhatsAppChannelsPayload, WhatsAppConnection, WhatsAppLog } from "@shared/types";
+import type { CampaignRule, WhatsAppChannelsPayload, WhatsAppConnection, WhatsAppLog } from "@shared/types";
 
 export async function fetchWhatsAppSnapshot(token: string) {
   const [config, channelsPayload, campaigns, logs] = await Promise.all([
@@ -99,3 +99,4 @@ export function deleteChannel(token: string, channelId: string) {
 export function testChannel(token: string, channelId: string) {
   return api.post<{ success: boolean; status: string; error?: string | null }>(`/engagement/whatsapp/channels/${channelId}/test`, undefined, { token });
 }
+
