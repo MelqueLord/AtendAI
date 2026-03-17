@@ -2,6 +2,7 @@ using Atendai.Application.DTOs;
 using Atendai.Application.Interfaces;
 using Atendai.Domain.Entities;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace Atendai.Application.Services;
 
@@ -53,6 +54,61 @@ internal static class TenantWhatsAppServiceSupport
         return status.Contains("qr", StringComparison.OrdinalIgnoreCase)
             ? status
             : $"{status}_qr";
+    }
+
+    public static string NormalizeMetaDeliveryStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "unknown";
+        }
+
+        return status.Trim().ToLowerInvariant();
+    }
+
+    public static bool IsDeliveryFailureStatus(string status)
+    {
+        return string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "undeliverable", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? BuildDeliveryErrorDetail(List<WhatsAppDeliveryError>? errors)
+    {
+        if (errors is null || errors.Count == 0)
+        {
+            return null;
+        }
+
+        var parts = errors
+            .Select(error =>
+            {
+                var summary = string.Join(" ", new[] { error.Title, error.Message, error.ErrorData?.Details }
+                    .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+                return error.Code.HasValue && !string.IsNullOrWhiteSpace(summary)
+                    ? $"{error.Code.Value}: {summary}"
+                    : error.Code.HasValue
+                        ? error.Code.Value.ToString()
+                        : summary;
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+
+        return parts.Length == 0 ? null : string.Join(" | ", parts);
+    }
+
+    public static string BuildLogPayloadEnvelope(string? payload, string? providerMessageId)
+    {
+        if (string.IsNullOrWhiteSpace(providerMessageId))
+        {
+            return payload ?? string.Empty;
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            message = payload,
+            providerMessageId
+        });
     }
 
     public static WhatsAppConnectionResponse? MapConnection(WhatsAppConnection? connection)

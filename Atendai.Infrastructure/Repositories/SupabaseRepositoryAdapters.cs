@@ -37,7 +37,7 @@ public sealed class SupabaseBillingRepository(SupabaseDataStore store) : IBillin
         MapSubscription(await store.UpsertTenantSubscriptionAsync(tenantId, planCode, cancellationToken));
 
     private static BillingPlan MapPlan(BillingPlanResponse plan) =>
-        new(plan.Code, plan.Name, plan.MonthlyPrice, plan.Currency, plan.IncludedConversations, plan.IncludedAgents, plan.IncludedWhatsAppNumbers, plan.IsPopular);
+        new(plan.Code, plan.Name, plan.MonthlyPrice, plan.Currency, plan.IncludedMessages, plan.IncludedAgents, plan.IncludedWhatsAppNumbers, plan.IsPopular);
 
     private static BillingSubscription MapSubscription(BillingSubscriptionResponse subscription) =>
         new(subscription.TenantId, subscription.PlanCode, subscription.PlanName, subscription.Status, subscription.TrialEndsAt, subscription.CurrentPeriodEnd, subscription.UpdatedAt);
@@ -170,7 +170,8 @@ public sealed class SupabaseWhatsAppRepository(SupabaseDataStore store) : IWhats
     public Task<Guid?> FindTenantIdByPhoneNumberIdAsync(string phoneNumberId, CancellationToken cancellationToken = default) => store.FindTenantIdByPhoneNumberIdAsync(phoneNumberId, cancellationToken);
     public Task<Guid?> FindTenantIdByVerifyTokenAsync(string verifyToken, CancellationToken cancellationToken = default) => store.FindTenantIdByVerifyTokenAsync(verifyToken, cancellationToken);
     public Task MarkWhatsAppConnectionTestResultAsync(Guid tenantId, bool success, string status, string? error, CancellationToken cancellationToken = default, Guid? channelId = null) => store.MarkWhatsAppConnectionTestResultAsync(tenantId, success, status, error, cancellationToken, channelId);
-    public Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, CancellationToken cancellationToken = default) => store.AddWhatsAppMessageLogAsync(tenantId, conversationId, toPhone, direction, status, errorDetail, payload, cancellationToken);
+    public Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, string? providerMessageId = null, CancellationToken cancellationToken = default) => store.AddWhatsAppMessageLogAsync(tenantId, conversationId, toPhone, direction, status, errorDetail, payload, providerMessageId, cancellationToken);
+    public Task<Guid?> UpdateWhatsAppMessageDeliveryStatusAsync(Guid tenantId, string providerMessageId, string status, string? errorDetail, CancellationToken cancellationToken = default) => store.UpdateWhatsAppMessageDeliveryStatusAsync(tenantId, providerMessageId, status, errorDetail, cancellationToken);
 
     public async Task<List<WhatsAppMessageLog>> GetWhatsAppMessageLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default) =>
         (await store.GetWhatsAppMessageLogsAsync(tenantId, limit, cancellationToken)).Select(MapLog).ToList();

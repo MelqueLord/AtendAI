@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -11,6 +12,8 @@ namespace Atendai.Infrastructure.Repositories;
 public sealed partial class SupabaseDataStore
 {
     private const int RecentConversationMessageWindow = 160;
+    private const int ConversationSummaryWindow = 180;
+    private const int TransientGetRetryCount = 2;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -110,25 +113,24 @@ public sealed partial class SupabaseDataStore
     {
         try
         {
-            var rows = await GetAsync<List<BillingPlanRow>>(
-                "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
-                cancellationToken);
-
-            if (rows.Count == 0)
+            try
             {
-                _logger.LogWarning("billing_plans retornou vazio. Usando catalogo padrao em memoria.");
-                return BillingCatalog.DefaultPlans.ToList();
-            }
+                var rows = await GetAsync<List<BillingPlanRow>>(
+                    "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_messages,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
+                    cancellationToken);
 
-            return rows.Select(r => new BillingPlanResponse(
-                r.Code,
-                r.Name,
-                r.MonthlyPrice,
-                r.Currency,
-                r.IncludedConversations,
-                r.IncludedAgents,
-                r.IncludedWhatsAppNumbers,
-                r.IsPopular)).ToList();
+                return MapBillingPlans(rows);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "billing_plans sem coluna included_messages ou consulta expandida indisponivel. Recuando para o contrato legado.");
+
+                var rows = await GetAsync<List<BillingPlanRow>>(
+                    "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
+                    cancellationToken);
+
+                return MapBillingPlans(rows);
+            }
         }
         catch (Exception ex)
         {
@@ -540,7 +542,7 @@ public sealed partial class SupabaseDataStore
     public async Task<List<Conversation>> GetConversationSummariesAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         var conversations = await GetAsync<List<ConversationRow>>(
-            $"conversations?tenant_id=eq.{tenantId}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc",
+            $"conversations?tenant_id=eq.{tenantId}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit={ConversationSummaryWindow}",
             cancellationToken);
 
         var result = new List<Conversation>(conversations.Count);
@@ -812,21 +814,83 @@ public sealed partial class SupabaseDataStore
         }, cancellationToken);
     }
 
-    public Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, CancellationToken cancellationToken = default)
+    public async Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, string? providerMessageId = null, CancellationToken cancellationToken = default)
     {
-        return PostAsync("whatsapp_message_logs", new[]
+        var payloadEnvelope = BuildWhatsAppLogPayloadEnvelope(payload, providerMessageId);
+
+        try
         {
-            new
+            await PostAsync("whatsapp_message_logs", new[]
             {
-                tenant_id = tenantId,
-                conversation_id = conversationId,
-                to_phone = toPhone,
-                direction,
-                status,
-                error_detail = errorDetail,
-                payload
-            }
-        }, cancellationToken);
+                new
+                {
+                    tenant_id = tenantId,
+                    conversation_id = conversationId,
+                    to_phone = toPhone,
+                    direction,
+                    status,
+                    error_detail = errorDetail,
+                    payload = payloadEnvelope,
+                    provider_message_id = providerMessageId
+                }
+            }, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (IsMissingSupabaseColumn(ex, "provider_message_id"))
+        {
+            _logger.LogWarning("whatsapp_message_logs ainda nao possui provider_message_id. Registrando log em modo legado.");
+
+            await PostAsync("whatsapp_message_logs", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    conversation_id = conversationId,
+                    to_phone = toPhone,
+                    direction,
+                    status,
+                    error_detail = errorDetail,
+                    payload = payloadEnvelope
+                }
+            }, cancellationToken);
+        }
+    }
+
+    public async Task<Guid?> UpdateWhatsAppMessageDeliveryStatusAsync(Guid tenantId, string providerMessageId, string status, string? errorDetail, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerMessageId))
+        {
+            return null;
+        }
+
+        var encodedProviderMessageId = Uri.EscapeDataString(providerMessageId.Trim());
+
+        try
+        {
+            var rows = await PatchAsync<List<WhatsAppMessageLogConversationRow>>(
+                $"whatsapp_message_logs?tenant_id=eq.{tenantId}&provider_message_id=eq.{encodedProviderMessageId}&select=conversation_id&order=created_at.desc&limit=1",
+                new
+                {
+                    status,
+                    error_detail = errorDetail
+                },
+                cancellationToken);
+
+            return rows.FirstOrDefault()?.ConversationId;
+        }
+        catch (InvalidOperationException ex) when (IsMissingSupabaseColumn(ex, "provider_message_id"))
+        {
+            var likeFilter = Uri.EscapeDataString($"*{providerMessageId.Trim()}*");
+            var rows = await PatchAsync<List<WhatsAppMessageLogConversationRow>>(
+                $"whatsapp_message_logs?tenant_id=eq.{tenantId}&payload=ilike.{likeFilter}&select=conversation_id&order=created_at.desc&limit=1",
+                new
+                {
+                    status,
+                    error_detail = errorDetail
+                },
+                cancellationToken);
+
+            return rows.FirstOrDefault()?.ConversationId;
+        }
     }
 
     public async Task<List<WhatsAppMessageLogResponse>> GetWhatsAppMessageLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default)
@@ -896,9 +960,32 @@ public sealed partial class SupabaseDataStore
             row.PlanCode,
             row.Plan?.Name ?? row.PlanCode,
             row.Status,
+            row.Status,
             row.TrialEndsAt,
+            null,
+            false,
             row.CurrentPeriodEnd,
+            null,
             row.UpdatedAt);
+    }
+
+    private List<BillingPlanResponse> MapBillingPlans(List<BillingPlanRow> rows)
+    {
+        if (rows.Count == 0)
+        {
+            _logger.LogWarning("billing_plans retornou vazio. Usando catalogo padrao em memoria.");
+            return BillingCatalog.DefaultPlans.ToList();
+        }
+
+        return rows.Select(r => new BillingPlanResponse(
+            r.Code,
+            r.Name,
+            r.MonthlyPrice,
+            r.Currency,
+            r.IncludedMessages ?? r.IncludedConversations,
+            r.IncludedAgents,
+            r.IncludedWhatsAppNumbers,
+            r.IsPopular)).ToList();
     }
 
     private static WhatsAppConnectionResponse MapWhatsAppConnection(WhatsAppConnectionRow row)
@@ -965,10 +1052,42 @@ public sealed partial class SupabaseDataStore
 
     private async Task<T> GetAsync<T>(string relativeUrl, CancellationToken cancellationToken)
     {
-        using var response = await _http.GetAsync(relativeUrl, cancellationToken);
-        await EnsureSuccess(response, cancellationToken);
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return (await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken))!;
+        for (var attempt = 1; attempt <= TransientGetRetryCount; attempt++)
+        {
+            using var response = await _http.GetAsync(relativeUrl, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                return (await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken))!;
+            }
+
+            if (attempt < TransientGetRetryCount && IsTransientSupabaseFailure(response.StatusCode))
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Supabase GET transitório falhou na tentativa {Attempt}/{MaxAttempts}. Status: {StatusCode}, Url: {RelativeUrl}, Body: {Body}",
+                    attempt,
+                    TransientGetRetryCount,
+                    response.StatusCode,
+                    relativeUrl,
+                    body);
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken);
+                continue;
+            }
+
+            await EnsureSuccess(response, cancellationToken);
+        }
+
+        throw new InvalidOperationException("Falha inesperada ao consultar Supabase.");
+    }
+
+    private static bool IsTransientSupabaseFailure(HttpStatusCode statusCode)
+    {
+        return statusCode == HttpStatusCode.RequestTimeout
+            || statusCode == HttpStatusCode.BadGateway
+            || statusCode == HttpStatusCode.ServiceUnavailable
+            || statusCode == HttpStatusCode.GatewayTimeout;
     }
 
     private Task PostAsync(string relativeUrl, object payload, CancellationToken cancellationToken)
@@ -979,6 +1098,21 @@ public sealed partial class SupabaseDataStore
     private Task PatchAsync(string relativeUrl, object payload, CancellationToken cancellationToken)
     {
         return SendWithoutBodyResult(HttpMethod.Patch, relativeUrl, payload, cancellationToken);
+    }
+
+    private async Task<T> PatchAsync<T>(string relativeUrl, object payload, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, relativeUrl)
+        {
+            Content = BuildJsonContent(payload)
+        };
+
+        request.Headers.TryAddWithoutValidation("Prefer", "return=representation");
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccess(response, cancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return (await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken))!;
     }
 
 
@@ -1027,6 +1161,27 @@ public sealed partial class SupabaseDataStore
     {
         var json = JsonSerializer.Serialize(payload);
         return new StringContent(json, Encoding.UTF8, "application/json");
+    }
+
+    private static string BuildWhatsAppLogPayloadEnvelope(string? payload, string? providerMessageId)
+    {
+        if (string.IsNullOrWhiteSpace(providerMessageId))
+        {
+            return payload ?? string.Empty;
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            message = payload,
+            providerMessageId
+        });
+    }
+
+    private static bool IsMissingSupabaseColumn(InvalidOperationException exception, string columnName)
+    {
+        return exception.Message.Contains(columnName, StringComparison.OrdinalIgnoreCase)
+            && (exception.Message.Contains("column", StringComparison.OrdinalIgnoreCase)
+                || exception.Message.Contains("schema cache", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string BuildPhoneLookupFilter(string fieldName, string phone)
@@ -1105,6 +1260,7 @@ public sealed partial class SupabaseDataStore
         [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
         [JsonPropertyName("monthly_price")] public decimal MonthlyPrice { get; set; }
         [JsonPropertyName("currency")] public string Currency { get; set; } = "BRL";
+        [JsonPropertyName("included_messages")] public int? IncludedMessages { get; set; }
         [JsonPropertyName("included_conversations")] public int IncludedConversations { get; set; }
         [JsonPropertyName("included_agents")] public int IncludedAgents { get; set; }
         [JsonPropertyName("included_whatsapp_numbers")] public int IncludedWhatsAppNumbers { get; set; }
@@ -1237,6 +1393,11 @@ public sealed partial class SupabaseDataStore
         [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
         [JsonPropertyName("error_detail")] public string? ErrorDetail { get; set; }
         [JsonPropertyName("created_at")] public DateTimeOffset CreatedAt { get; set; }
+    }
+
+    private sealed class WhatsAppMessageLogConversationRow
+    {
+        [JsonPropertyName("conversation_id")] public Guid? ConversationId { get; set; }
     }
 
     private sealed class MessageRow

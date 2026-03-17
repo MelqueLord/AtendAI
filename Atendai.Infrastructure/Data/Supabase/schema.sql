@@ -46,6 +46,7 @@ CREATE TABLE public.billing_plans (
   name text NOT NULL,
   monthly_price numeric(12,2) NOT NULL,
   currency text NOT NULL DEFAULT 'BRL',
+  included_messages int NOT NULL,
   included_conversations int NOT NULL,
   included_agents int NOT NULL,
   included_whatsapp_numbers int NOT NULL DEFAULT 1,
@@ -267,11 +268,15 @@ CREATE TABLE public.whatsapp_message_logs (
   conversation_id uuid NULL REFERENCES public.conversations(id) ON DELETE SET NULL,
   to_phone text NOT NULL,
   direction text NOT NULL,
+  provider_message_id text NULL,
   status text NOT NULL,
   error_detail text NULL,
   payload text NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_whatsapp_message_logs_provider_message_id
+  ON public.whatsapp_message_logs(provider_message_id);
 
 INSERT INTO public.tenants (id, name, segment) VALUES
   ('11111111-1111-1111-1111-111111111111', 'AutoPrime Oficina', 'Automotivo'),
@@ -291,15 +296,16 @@ ON CONFLICT (email) DO UPDATE SET
   role = excluded.role,
   deleted_at = null;
 
-INSERT INTO public.billing_plans (code, name, monthly_price, currency, included_conversations, included_agents, included_whatsapp_numbers, is_popular, active) VALUES
-  ('TRIAL', 'Trial 14 dias', 0, 'BRL', 200, 2, 1, false, true),
-  ('STARTER', 'Starter', 99, 'BRL', 1500, 4, 1, false, true),
-  ('GROWTH', 'Growth', 399, 'BRL', 6000, 10, 3, true, true),
-  ('SCALE', 'Scale', 999, 'BRL', 20000, 30, 10, false, true)
+INSERT INTO public.billing_plans (code, name, monthly_price, currency, included_messages, included_conversations, included_agents, included_whatsapp_numbers, is_popular, active) VALUES
+  ('TRIAL', 'Trial 14 dias', 0, 'BRL', 200, 200, 2, 1, false, true),
+  ('STARTER', 'Starter', 99, 'BRL', 1500, 1500, 4, 1, false, true),
+  ('GROWTH', 'Growth', 399, 'BRL', 6000, 6000, 10, 3, true, true),
+  ('SCALE', 'Scale', 999, 'BRL', 20000, 20000, 30, 10, false, true)
 ON CONFLICT (code) DO UPDATE SET
   name = excluded.name,
   monthly_price = excluded.monthly_price,
   currency = excluded.currency,
+  included_messages = excluded.included_messages,
   included_conversations = excluded.included_conversations,
   included_agents = excluded.included_agents,
   included_whatsapp_numbers = excluded.included_whatsapp_numbers,

@@ -43,9 +43,10 @@ public sealed class BillingService(
         var total = last30.Count;
         if (total == 0)
         {
-            return new ValueMetricsResponse(0, 0, 0, 0, 0);
+            return new ValueMetricsResponse(0, 0, 0, 0, 0, 0);
         }
 
+        var messages30d = last30.Sum(c => c.Messages.Count);
         var humanHandoffs = last30.Count(c => c.Messages.Any(m => string.Equals(m.Sender, "HumanAgent", StringComparison.OrdinalIgnoreCase)));
         var automated = total - humanHandoffs;
         var automationRate = Math.Round((double)automated / total * 100, 1);
@@ -53,16 +54,66 @@ public sealed class BillingService(
         var estimatedHoursSaved = Math.Round(automated * 6.5 / 60.0, 1);
         var estimatedRevenueProtected = Math.Round(humanHandoffs * 38.0, 2);
 
-        return new ValueMetricsResponse(total, humanHandoffs, automationRate, estimatedHoursSaved, estimatedRevenueProtected);
+        return new ValueMetricsResponse(total, messages30d, humanHandoffs, automationRate, estimatedHoursSaved, estimatedRevenueProtected);
     }
 
     private static BillingPlanResponse MapPlan(BillingPlan plan)
     {
-        return new BillingPlanResponse(plan.Code, plan.Name, plan.MonthlyPrice, plan.Currency, plan.IncludedConversations, plan.IncludedAgents, plan.IncludedWhatsAppNumbers, plan.IsPopular);
+        return new BillingPlanResponse(plan.Code, plan.Name, plan.MonthlyPrice, plan.Currency, plan.IncludedMessages, plan.IncludedAgents, plan.IncludedWhatsAppNumbers, plan.IsPopular);
     }
 
     private static BillingSubscriptionResponse MapSubscription(BillingSubscription subscription)
     {
-        return new BillingSubscriptionResponse(subscription.TenantId, subscription.PlanCode, subscription.PlanName, subscription.Status, subscription.TrialEndsAt, subscription.CurrentPeriodEnd, subscription.UpdatedAt);
+        var nowUtc = DateTimeOffset.UtcNow;
+        var trialDaysRemaining = CalculateDaysRemaining(subscription.TrialEndsAt, nowUtc);
+        var currentPeriodDaysRemaining = CalculateDaysRemaining(subscription.CurrentPeriodEnd, nowUtc);
+        var isTrialExpired = subscription.TrialEndsAt.HasValue && subscription.TrialEndsAt.Value <= nowUtc;
+        var effectiveStatus = ResolveEffectiveStatus(subscription, nowUtc, isTrialExpired);
+
+        return new BillingSubscriptionResponse(
+            subscription.TenantId,
+            subscription.PlanCode,
+            subscription.PlanName,
+            subscription.Status,
+            effectiveStatus,
+            subscription.TrialEndsAt,
+            trialDaysRemaining,
+            isTrialExpired,
+            subscription.CurrentPeriodEnd,
+            currentPeriodDaysRemaining,
+            subscription.UpdatedAt);
+    }
+
+    private static string ResolveEffectiveStatus(BillingSubscription subscription, DateTimeOffset nowUtc, bool isTrialExpired)
+    {
+        if (string.Equals(subscription.Status, "trialing", StringComparison.OrdinalIgnoreCase) && isTrialExpired)
+        {
+            return "trial_expired";
+        }
+
+        if (string.Equals(subscription.Status, "active", StringComparison.OrdinalIgnoreCase)
+            && subscription.CurrentPeriodEnd.HasValue
+            && subscription.CurrentPeriodEnd.Value <= nowUtc)
+        {
+            return "expired";
+        }
+
+        return subscription.Status;
+    }
+
+    private static int? CalculateDaysRemaining(DateTimeOffset? deadline, DateTimeOffset nowUtc)
+    {
+        if (!deadline.HasValue)
+        {
+            return null;
+        }
+
+        var remaining = deadline.Value - nowUtc;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return 0;
+        }
+
+        return (int)Math.Ceiling(remaining.TotalDays);
     }
 }

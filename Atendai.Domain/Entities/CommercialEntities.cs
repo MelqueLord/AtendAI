@@ -5,7 +5,7 @@ public sealed record BillingPlan(
     string Name,
     decimal MonthlyPrice,
     string Currency,
-    int IncludedConversations,
+    int IncludedMessages,
     int IncludedAgents,
     int IncludedWhatsAppNumbers,
     bool IsPopular);

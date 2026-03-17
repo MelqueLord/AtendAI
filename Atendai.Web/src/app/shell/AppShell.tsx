@@ -1,4 +1,4 @@
-﻿import type { PropsWithChildren } from "react";
+import { useMemo, type PropsWithChildren } from "react";
 import { pageMeta } from "@shared/constants/workspace";
 import { formatSeconds } from "@shared/utils/formatting";
 import type { AnalyticsOverview, AppPage, AuthResponse, TenantOption } from "@shared/types";
@@ -52,6 +52,26 @@ export function AppShell({
   error,
   children
 }: AppShellProps) {
+  const tenantOptions = useMemo(() => {
+    if (auth.role !== "SuperAdmin") {
+      return tenants;
+    }
+
+    const hasActiveTenant = tenants.some((tenant) => tenant.id === auth.tenantId);
+    if (hasActiveTenant) {
+      return tenants;
+    }
+
+    return [
+      {
+        id: auth.tenantId,
+        name: auth.tenantName,
+        segment: "Tenant ativo"
+      },
+      ...tenants
+    ];
+  }, [auth.role, auth.tenantId, auth.tenantName, tenants]);
+
   return (
     <main className="appRoot min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)]">
       <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-4 sm:px-6 lg:px-8">
@@ -127,7 +147,7 @@ export function AppShell({
                         onChange={(event) => onSwitchTenant(event.target.value)}
                         disabled={switchingTenant}
                       >
-                        {tenants.map((tenant) => (
+                        {tenantOptions.map((tenant) => (
                           <option key={tenant.id} value={tenant.id}>
                             {tenant.name} ({tenant.segment})
                           </option>

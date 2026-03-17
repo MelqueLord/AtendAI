@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { refreshSession } from "@features/auth/services/authService";
 import type { AuthView } from "@app/store";
 import type { AppPage, AuthResponse } from "@shared/types";
@@ -109,6 +109,10 @@ export function useAuthSessionState(): AuthSessionState {
     setCurrentPage((page) => (isPageAllowedForRole(page, auth.role) ? page : defaultPageForRole(auth.role)));
   }, [auth]);
 
+  const clearSessionRestoreError = useCallback(() => {
+    setSessionRestoreError("");
+  }, []);
+
   return {
     auth,
     setAuth,
@@ -118,7 +122,6 @@ export function useAuthSessionState(): AuthSessionState {
     currentPage,
     setCurrentPage,
     sessionRestoreError,
-    clearSessionRestoreError: () => setSessionRestoreError("")
+    clearSessionRestoreError
   };
 }
-

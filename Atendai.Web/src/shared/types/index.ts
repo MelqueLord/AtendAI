@@ -111,7 +111,7 @@ export type BillingPlan = {
   name: string;
   monthlyPrice: number;
   currency: string;
-  includedConversations: number;
+  includedMessages: number;
   includedAgents: number;
   includedWhatsAppNumbers: number;
   isPopular: boolean;
@@ -122,13 +122,18 @@ export type BillingSubscription = {
   planCode: string;
   planName: string;
   status: string;
+  effectiveStatus: string;
   trialEndsAt: string | null;
+  trialDaysRemaining: number | null;
+  isTrialExpired: boolean;
   currentPeriodEnd: string | null;
+  currentPeriodDaysRemaining: number | null;
   updatedAt: string;
 };
 
 export type ValueMetrics = {
   conversations30d: number;
+  messages30d: number;
   humanHandoffs30d: number;
   automationRate: number;
   estimatedHoursSaved: number;

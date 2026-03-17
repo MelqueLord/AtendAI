@@ -25,6 +25,9 @@ public sealed class WhatsAppValue
     [JsonPropertyName("messages")]
     public List<WhatsAppMessage>? Messages { get; set; }
 
+    [JsonPropertyName("statuses")]
+    public List<WhatsAppDeliveryStatus>? Statuses { get; set; }
+
     [JsonPropertyName("contacts")]
     public List<WhatsAppContact>? Contacts { get; set; }
 
@@ -48,6 +51,45 @@ public sealed class WhatsAppMessage
 
     [JsonPropertyName("text")]
     public WhatsAppText? Text { get; set; }
+}
+
+public sealed class WhatsAppDeliveryStatus
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("recipient_id")]
+    public string? RecipientId { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonPropertyName("errors")]
+    public List<WhatsAppDeliveryError>? Errors { get; set; }
+}
+
+public sealed class WhatsAppDeliveryError
+{
+    [JsonPropertyName("code")]
+    public int? Code { get; set; }
+
+    [JsonPropertyName("title")]
+    public string? Title { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("error_data")]
+    public WhatsAppDeliveryErrorData? ErrorData { get; set; }
+}
+
+public sealed class WhatsAppDeliveryErrorData
+{
+    [JsonPropertyName("details")]
+    public string? Details { get; set; }
 }
 
 public sealed class WhatsAppText

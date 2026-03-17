@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { fetchBotSettings } from "@features/ai/services/aiService";
 import { fetchCrmSnapshot } from "@features/clientes/services/clientesService";
 import { fetchAnalyticsOverview, fetchBillingSubscription, fetchCommercialSnapshot } from "@features/dashboard/services/dashboardService";
@@ -109,7 +109,7 @@ export function useWorkspaceDataLoaders({
   loadAttendanceContactsIndex,
   setError
 }: LoadersParams) {
-  async function loadBillingSubscriptionSnapshot(token = authToken) {
+  const loadBillingSubscriptionSnapshot = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -119,9 +119,9 @@ export function useWorkspaceDataLoaders({
     } catch {
       // Mantemos o ultimo snapshot quando a consulta complementar falha.
     }
-  }
+  }, [authToken, setBillingSubscription]);
 
-  async function loadSettings(token = authToken, role = authRole) {
+  const loadSettings = useCallback(async (token = authToken, role = authRole) => {
     if (!token || (role !== "Admin" && role !== "SuperAdmin")) {
       return;
     }
@@ -137,9 +137,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar configuracoes."));
     }
-  }
+  }, [authRole, authToken, setError, setSettings, setSettingsDraft]);
 
-  async function loadAnalytics(token = authToken) {
+  const loadAnalytics = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -149,9 +149,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar metricas."));
     }
-  }
+  }, [authToken, setAnalytics, setError]);
 
-  async function loadTenants(token = authToken) {
+  const loadTenants = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -161,9 +161,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar tenants."));
     }
-  }
+  }, [authToken, setError, setTenants]);
 
-  async function loadManagedCompanies(token = authToken) {
+  const loadManagedCompanies = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -173,9 +173,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar empresas."));
     }
-  }
+  }, [authToken, setError, setManagedCompanies]);
 
-  async function loadManagedUsers(token = authToken, role = authRole, tenantId = authTenantId) {
+  const loadManagedUsers = useCallback(async (token = authToken, role = authRole, tenantId = authTenantId) => {
     if (!token || !role || role === "Agent") {
       setManagedUsers([]);
       return;
@@ -186,9 +186,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar usuarios."));
     }
-  }
+  }, [authRole, authTenantId, authToken, setError, setManagedUsers]);
 
-  async function loadCommercial(token = authToken, role = authRole) {
+  const loadCommercial = useCallback(async (token = authToken, role = authRole) => {
     if (!token || (role !== "Admin" && role !== "SuperAdmin")) {
       return;
     }
@@ -201,9 +201,9 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar dados comerciais."));
     }
-  }
+  }, [authRole, authToken, setBillingPlans, setBillingSubscription, setError, setValueMetrics]);
 
-  async function loadEngagement(token = authToken, role = authRole) {
+  const loadEngagement = useCallback(async (token = authToken, role = authRole) => {
     if (!token || (role !== "Admin" && role !== "SuperAdmin")) {
       return;
     }
@@ -231,9 +231,19 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar configuracoes de WhatsApp e campanhas."));
     }
-  }
+  }, [
+    authRole,
+    authToken,
+    setCampaigns,
+    setError,
+    setWhatsAppChannelLimit,
+    setWhatsAppChannels,
+    setWhatsAppConfig,
+    setWhatsAppDraft,
+    setWhatsAppLogs
+  ]);
 
-  async function loadCrm(token = authToken, role = authRole) {
+  const loadCrm = useCallback(async (token = authToken, role = authRole) => {
     if (!token || !role) {
       return;
     }
@@ -248,9 +258,18 @@ export function useWorkspaceDataLoaders({
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar dados de CRM."));
     }
-  }
+  }, [
+    authRole,
+    authToken,
+    setAutomationOptions,
+    setContacts,
+    setError,
+    setFeedbackList,
+    setQueueHealth,
+    setScheduledBroadcasts
+  ]);
 
-  async function refreshAll(token = authToken, role = authRole, tenantId = authTenantId) {
+  const refreshAll = useCallback(async (token = authToken, role = authRole, tenantId = authTenantId) => {
     if (!token) {
       return;
     }
@@ -269,9 +288,23 @@ export function useWorkspaceDataLoaders({
     if (role === "SuperAdmin") {
       await Promise.all([loadTenants(token), loadManagedCompanies(token)]);
     }
-  }
+  }, [
+    authRole,
+    authTenantId,
+    authToken,
+    loadAnalytics,
+    loadCommercial,
+    loadConversations,
+    loadCrm,
+    loadEngagement,
+    loadManagedCompanies,
+    loadManagedUsers,
+    loadQuickReplies,
+    loadSettings,
+    loadTenants
+  ]);
 
-  async function loadPageData(page: AppPage, token = authToken, role = authRole, tenantId = authTenantId, force = false) {
+  const loadPageData = useCallback(async (page: AppPage, token = authToken, role = authRole, tenantId = authTenantId, force = false) => {
     if (!token || !role) {
       return;
     }
@@ -311,7 +344,7 @@ export function useWorkspaceDataLoaders({
         }
         break;
       case "COMMERCIAL":
-        tasks.push(loadCommercial(token, role));
+        tasks.push(loadCommercial(token, role), loadEngagement(token, role));
         if (role === "SuperAdmin") {
           tasks.push(loadTenants(token));
         }
@@ -338,7 +371,27 @@ export function useWorkspaceDataLoaders({
     if (tasks.length > 0) {
       await Promise.all(tasks);
     }
-  }
+  }, [
+    analytics,
+    authRole,
+    authTenantId,
+    authToken,
+    billingSubscription,
+    loadAnalytics,
+    loadAttendanceContactsIndex,
+    loadBillingSubscriptionSnapshot,
+    loadCommercial,
+    loadConversations,
+    loadCrm,
+    loadEngagement,
+    loadManagedCompanies,
+    loadManagedUsers,
+    loadQuickReplies,
+    loadSettings,
+    loadTenants,
+    settings,
+    tenants.length
+  ]);
 
   return {
     loadBillingSubscriptionSnapshot,

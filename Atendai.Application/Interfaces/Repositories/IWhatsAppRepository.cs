@@ -17,6 +17,7 @@ public interface IWhatsAppRepository
     Task<Guid?> FindTenantIdByPhoneNumberIdAsync(string phoneNumberId, CancellationToken cancellationToken = default);
     Task<Guid?> FindTenantIdByVerifyTokenAsync(string verifyToken, CancellationToken cancellationToken = default);
     Task MarkWhatsAppConnectionTestResultAsync(Guid tenantId, bool success, string status, string? error, CancellationToken cancellationToken = default, Guid? channelId = null);
-    Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, CancellationToken cancellationToken = default);
+    Task AddWhatsAppMessageLogAsync(Guid tenantId, Guid? conversationId, string toPhone, string direction, string status, string? errorDetail, string? payload, string? providerMessageId = null, CancellationToken cancellationToken = default);
+    Task<Guid?> UpdateWhatsAppMessageDeliveryStatusAsync(Guid tenantId, string providerMessageId, string status, string? errorDetail, CancellationToken cancellationToken = default);
     Task<List<WhatsAppMessageLog>> GetWhatsAppMessageLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default);
 }

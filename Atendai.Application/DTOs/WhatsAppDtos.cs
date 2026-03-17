@@ -30,6 +30,13 @@ public sealed record WhatsAppMessageLogResponse(
 
 public sealed record WhatsAppTestResponse(bool Success, string Status, string? Error);
 
+public sealed record WhatsAppDeliveryEventResult(
+    Guid? ConversationId,
+    string ProviderMessageId,
+    string Status,
+    string? ErrorDetail,
+    bool Failed);
+
 public sealed record WhatsAppChannelResponse(
     Guid Id,
     Guid TenantId,

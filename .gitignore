@@ -18,13 +18,11 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets / local config
 Atendai.API/appsettings.Development.json
-Atendai.API/appsettings.json
-
+Atendai.API/appsettings.Local.json
 .env
 .env.*
-
 .history/
 .dotnet/
 whatsapp-web-bridge/data/
@@ -33,5 +31,5 @@ whatsapp-web-bridge/data/
 # TypeScript
 *.tsbuildinfo
 
-
+# Tests
 TestResults/

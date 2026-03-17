@@ -57,6 +57,7 @@ public sealed class ConversationService(
             string.Equals(transport, "qr", StringComparison.OrdinalIgnoreCase) ? "received_qr" : "received",
             null,
             request.Message,
+            null,
             cancellationToken);
 
         if (conversation.Status is ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling)
@@ -161,6 +162,7 @@ public sealed class ConversationService(
                 "synced_qr_history",
                 null,
                 lastMessage,
+                null,
                 cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(lastMessage))

@@ -114,7 +114,7 @@ public sealed class WhatsAppController(
             foreach (var change in entry.Changes)
             {
                 var value = change.Value;
-                if (value?.Messages is null)
+                if (value is null)
                 {
                     continue;
                 }
@@ -129,6 +129,36 @@ public sealed class WhatsAppController(
                 if (!tenantId.HasValue)
                 {
                     logger.LogWarning("Webhook recebido sem tenant resolvido.");
+                    continue;
+                }
+
+                if (value.Statuses is not null)
+                {
+                    foreach (var deliveryStatus in value.Statuses)
+                    {
+                        var deliveryResult = await tenantWhatsAppService.HandleDeliveryStatusAsync(
+                            tenantId.Value,
+                            deliveryStatus,
+                            cancellationToken);
+
+                        if (deliveryResult is null)
+                        {
+                            continue;
+                        }
+
+                        if (deliveryResult.Failed)
+                        {
+                            logger.LogWarning(
+                                "Meta reportou falha de entrega para providerMessageId {ProviderMessageId}. ConversationId: {ConversationId}. Detail: {Detail}",
+                                deliveryResult.ProviderMessageId,
+                                deliveryResult.ConversationId,
+                                deliveryResult.ErrorDetail);
+                        }
+                    }
+                }
+
+                if (value.Messages is null)
+                {
                     continue;
                 }
 

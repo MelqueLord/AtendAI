@@ -200,6 +200,30 @@ public sealed class TenantWhatsAppService(
         return notConfigured;
     }
 
+    public async Task<WhatsAppDeliveryEventResult?> HandleDeliveryStatusAsync(Guid tenantId, WhatsAppDeliveryStatus deliveryStatus, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(deliveryStatus.Id))
+        {
+            return null;
+        }
+
+        var normalizedStatus = TenantWhatsAppServiceSupport.NormalizeMetaDeliveryStatus(deliveryStatus.Status);
+        var errorDetail = TenantWhatsAppServiceSupport.BuildDeliveryErrorDetail(deliveryStatus.Errors);
+        var conversationId = await whatsAppRepository.UpdateWhatsAppMessageDeliveryStatusAsync(
+            tenantId,
+            deliveryStatus.Id.Trim(),
+            normalizedStatus,
+            errorDetail,
+            cancellationToken);
+
+        return new WhatsAppDeliveryEventResult(
+            conversationId,
+            deliveryStatus.Id.Trim(),
+            normalizedStatus,
+            errorDetail,
+            TenantWhatsAppServiceSupport.IsDeliveryFailureStatus(normalizedStatus));
+    }
+
     public async Task<List<WhatsAppMessageLogResponse>> GetLogsAsync(Guid tenantId, int limit = 100, CancellationToken cancellationToken = default)
     {
         var logs = await whatsAppRepository.GetWhatsAppMessageLogsAsync(tenantId, limit, cancellationToken);
@@ -426,6 +450,7 @@ public sealed class TenantWhatsAppService(
             send.Status,
             send.Error,
             message,
+            send.ProviderMessageId,
             cancellationToken);
     }
 

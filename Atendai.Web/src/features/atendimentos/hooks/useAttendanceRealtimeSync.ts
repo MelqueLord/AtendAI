@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { AppPage } from "@shared/types";
 import type { AttendanceRealtimeState } from "@app/store";
 import { createAttendanceHubConnection, type AttendanceRefreshPayload } from "@infrastructure/realtime/attendanceHub";
@@ -28,6 +28,22 @@ export function useAttendanceRealtimeSync({
   setAttendanceRealtimeLastPublishedAt,
   setAttendanceRealtimeLastReceivedAt
 }: UseAttendanceRealtimeSyncParams) {
+  const loadConversationDetailRef = useRef(loadConversationDetail);
+  const loadConversationsRef = useRef(loadConversations);
+  const loadConversationNotesRef = useRef(loadConversationNotes);
+
+  useEffect(() => {
+    loadConversationDetailRef.current = loadConversationDetail;
+  }, [loadConversationDetail]);
+
+  useEffect(() => {
+    loadConversationsRef.current = loadConversations;
+  }, [loadConversations]);
+
+  useEffect(() => {
+    loadConversationNotesRef.current = loadConversationNotes;
+  }, [loadConversationNotes]);
+
   useEffect(() => {
     if (!authToken || currentPage !== "ATTENDANCE") {
       setAttendanceRealtimeState("disconnected");
@@ -48,23 +64,23 @@ export function useAttendanceRealtimeSync({
       setAttendanceRealtimeLastReceivedAt(new Date().toISOString());
 
       if (payload?.conversationId) {
-        const refreshedConversation = await loadConversationDetail(payload.conversationId, authToken, { background: true });
+        const refreshedConversation = await loadConversationDetailRef.current(payload.conversationId, authToken, { background: true });
         if (!refreshedConversation) {
-          await loadConversations(authToken, { background: true });
+          await loadConversationsRef.current(authToken, { background: true });
         }
 
         if (payload.conversationId === selectedIdRef.current) {
-          await loadConversationNotes(payload.conversationId, authToken, { background: true });
+          await loadConversationNotesRef.current(payload.conversationId, authToken, { background: true });
         }
 
         return;
       }
 
-      await loadConversations(authToken, { background: true });
+      await loadConversationsRef.current(authToken, { background: true });
       if (selectedIdRef.current) {
         await Promise.all([
-          loadConversationDetail(selectedIdRef.current, authToken, { background: true }),
-          loadConversationNotes(selectedIdRef.current, authToken, { background: true })
+          loadConversationDetailRef.current(selectedIdRef.current, authToken, { background: true }),
+          loadConversationNotesRef.current(selectedIdRef.current, authToken, { background: true })
         ]);
       }
     };
@@ -106,7 +122,10 @@ export function useAttendanceRealtimeSync({
       if (!cancelled && connection.state !== "Connected") {
         setAttendanceRealtimeState("fallback");
       }
-      void refreshFromRealtime();
+
+      if (!cancelled) {
+        void refreshFromRealtime();
+      }
     }, 30000);
 
     return () => {
@@ -119,9 +138,6 @@ export function useAttendanceRealtimeSync({
     apiBase,
     authToken,
     currentPage,
-    loadConversationDetail,
-    loadConversationNotes,
-    loadConversations,
     selectedIdRef,
     setAttendanceRealtimeLastPublishedAt,
     setAttendanceRealtimeLastReceivedAt,

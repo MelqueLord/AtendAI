@@ -1,4 +1,4 @@
-import { startTransition, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { startTransition, useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { fetchContacts as fetchCrmContacts, saveContact as saveContactRequest } from "@features/clientes/services/clientesService";
 import {
   fetchConversationById,
@@ -56,14 +56,14 @@ export function useAttendanceWorkspaceData({
   setQuickReplies,
   setError
 }: AttendanceWorkspaceDataParams) {
-  function cloneConversationSnapshot(conversation: Conversation) {
+  const cloneConversationSnapshot = useCallback((conversation: Conversation) => {
     return {
       ...conversation,
       messages: conversation.messages.map((message) => ({ ...message }))
     };
-  }
+  }, []);
 
-  function getConversationSnapshot(conversationId: string) {
+  const getConversationSnapshot = useCallback((conversationId: string) => {
     const cachedConversation = conversationDetailCacheRef.current.get(conversationId);
     if (cachedConversation) {
       return cloneConversationSnapshot(cachedConversation);
@@ -76,9 +76,9 @@ export function useAttendanceWorkspaceData({
 
     const listedConversation = conversations.find((conversation) => conversation.id === conversationId);
     return listedConversation ? cloneConversationSnapshot(listedConversation) : null;
-  }
+  }, [cloneConversationSnapshot, conversationDetailCacheRef, conversations, selectedConversationDetail]);
 
-  function mergeConversationIntoAttendanceState(updatedConversation: Conversation) {
+  const mergeConversationIntoAttendanceState = useCallback((updatedConversation: Conversation) => {
     conversationDetailCacheRef.current.set(updatedConversation.id, cloneConversationSnapshot(updatedConversation));
 
     startTransition(() => {
@@ -103,9 +103,9 @@ export function useAttendanceWorkspaceData({
     if (selectedIdRef.current === updatedConversation.id || selectedId === updatedConversation.id) {
       setSelectedConversationDetail(cloneConversationSnapshot(updatedConversation));
     }
-  }
+  }, [cloneConversationSnapshot, conversationDetailCacheRef, selectedId, selectedIdRef, setConversations, setSelectedConversationDetail]);
 
-  function mergeContactIntoState(savedContact: Contact) {
+  const mergeContactIntoState = useCallback((savedContact: Contact) => {
     setContacts((previous) => {
       const existing = previous.some((contact) => contact.id === savedContact.id);
       const next = existing
@@ -114,9 +114,9 @@ export function useAttendanceWorkspaceData({
 
       return [...next].sort((left, right) => left.name.localeCompare(right.name));
     });
-  }
+  }, [setContacts]);
 
-  async function loadConversations(token = authToken, options?: { background?: boolean }) {
+  const loadConversations = useCallback(async (token = authToken, options?: { background?: boolean }) => {
     if (!token) {
       return;
     }
@@ -163,9 +163,21 @@ export function useAttendanceWorkspaceData({
         setAttendanceQueueRefreshing(false);
       }
     }
-  }
+  }, [
+    authToken,
+    conversationDetailCacheRef,
+    conversations.length,
+    conversationsAbortRef,
+    selectedIdRef,
+    setAttendanceQueueLoading,
+    setAttendanceQueueRefreshing,
+    setConversations,
+    setError,
+    setSelectedConversationDetail,
+    setSelectedId
+  ]);
 
-  async function loadAttendanceContactsIndex(token = authToken) {
+  const loadAttendanceContactsIndex = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -175,9 +187,9 @@ export function useAttendanceWorkspaceData({
     } catch {
       // Attendance still works with persisted conversation names if this lightweight contact index fails.
     }
-  }
+  }, [authToken, setContacts]);
 
-  async function loadConversationDetail(conversationId: string, token = authToken, options?: { background?: boolean }): Promise<Conversation | null> {
+  const loadConversationDetail = useCallback(async (conversationId: string, token = authToken, options?: { background?: boolean }): Promise<Conversation | null> => {
     if (!token || !conversationId) {
       return null;
     }
@@ -207,24 +219,17 @@ export function useAttendanceWorkspaceData({
         setAttendanceConversationLoading(false);
       }
     }
-  }
+  }, [
+    authToken,
+    conversationDetailAbortRef,
+    conversationDetailCacheRef,
+    mergeConversationIntoAttendanceState,
+    selectedIdRef,
+    setAttendanceConversationLoading,
+    setSelectedConversationDetail
+  ]);
 
-  async function refreshInboxOnly(token = authToken) {
-    if (!token) {
-      return;
-    }
-
-    const activeConversationId = selectedIdRef.current;
-    await loadConversations(token, { background: true });
-    if (activeConversationId) {
-      await Promise.all([
-        loadConversationDetail(activeConversationId, token, { background: true }),
-        loadConversationNotes(activeConversationId, token, { background: true })
-      ]);
-    }
-  }
-
-  async function loadConversationNotes(conversationId: string, token = authToken, options?: { background?: boolean }) {
+  const loadConversationNotes = useCallback(async (conversationId: string, token = authToken, options?: { background?: boolean }) => {
     if (!token || !conversationId) {
       return;
     }
@@ -254,9 +259,31 @@ export function useAttendanceWorkspaceData({
         setAttendanceNotesLoading(false);
       }
     }
-  }
+  }, [
+    authToken,
+    conversationNotesAbortRef,
+    conversationNotesCacheRef,
+    selectedIdRef,
+    setAttendanceNotesLoading,
+    setConversationNotes
+  ]);
 
-  function applyOptimisticConversationUpdate(conversationId: string, updater: (conversation: Conversation) => Conversation) {
+  const refreshInboxOnly = useCallback(async (token = authToken) => {
+    if (!token) {
+      return;
+    }
+
+    const activeConversationId = selectedIdRef.current;
+    await loadConversations(token, { background: true });
+    if (activeConversationId) {
+      await Promise.all([
+        loadConversationDetail(activeConversationId, token, { background: true }),
+        loadConversationNotes(activeConversationId, token, { background: true })
+      ]);
+    }
+  }, [authToken, loadConversationDetail, loadConversationNotes, loadConversations, selectedIdRef]);
+
+  const applyOptimisticConversationUpdate = useCallback((conversationId: string, updater: (conversation: Conversation) => Conversation) => {
     const previousConversation = getConversationSnapshot(conversationId);
     if (!previousConversation) {
       return null;
@@ -265,9 +292,9 @@ export function useAttendanceWorkspaceData({
     const nextConversation = updater(previousConversation);
     mergeConversationIntoAttendanceState(nextConversation);
     return previousConversation;
-  }
+  }, [getConversationSnapshot, mergeConversationIntoAttendanceState]);
 
-  async function loadQuickReplies(token = authToken) {
+  const loadQuickReplies = useCallback(async (token = authToken) => {
     if (!token) {
       return;
     }
@@ -277,13 +304,13 @@ export function useAttendanceWorkspaceData({
     } catch {
       setQuickReplies([]);
     }
-  }
+  }, [authToken, setQuickReplies]);
 
-  async function saveConversationContactPanel(
+  const saveConversationContactPanel = useCallback(async (
     contactDraft: { id: string; name: string; phone: string; state: string; status: string; tags: string; ownerUserId: string },
     selectedConversation: Conversation | null,
     token = authToken
-  ) {
+  ) => {
     if (!token || !selectedConversation) {
       return null;
     }
@@ -303,7 +330,7 @@ export function useAttendanceWorkspaceData({
     }
 
     return savedContact;
-  }
+  }, [authToken, mergeContactIntoState]);
 
   return {
     cloneConversationSnapshot,

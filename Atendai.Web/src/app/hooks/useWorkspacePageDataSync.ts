@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { AppPage } from "@shared/types";
 
 type UseWorkspacePageDataSyncParams = {
@@ -16,11 +16,17 @@ export function useWorkspacePageDataSync({
   currentPage,
   loadPageData
 }: UseWorkspacePageDataSyncParams) {
+  const loadPageDataRef = useRef(loadPageData);
+
+  useEffect(() => {
+    loadPageDataRef.current = loadPageData;
+  }, [loadPageData]);
+
   useEffect(() => {
     if (!authToken) {
       return;
     }
 
-    void loadPageData(currentPage, authToken, authRole, authTenantId);
-  }, [authRole, authTenantId, authToken, currentPage, loadPageData]);
+    void loadPageDataRef.current(currentPage, authToken, authRole, authTenantId);
+  }, [authRole, authTenantId, authToken, currentPage]);
 }
