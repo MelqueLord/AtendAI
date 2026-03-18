@@ -76,6 +76,7 @@ public sealed class BillingService(
             subscription.PlanName,
             subscription.Status,
             effectiveStatus,
+            subscription.CreatedAt,
             subscription.TrialEndsAt,
             trialDaysRemaining,
             isTrialExpired,

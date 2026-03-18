@@ -40,7 +40,7 @@ public sealed class SupabaseBillingRepository(SupabaseDataStore store) : IBillin
         new(plan.Code, plan.Name, plan.MonthlyPrice, plan.Currency, plan.IncludedMessages, plan.IncludedAgents, plan.IncludedWhatsAppNumbers, plan.IsPopular);
 
     private static BillingSubscription MapSubscription(BillingSubscriptionResponse subscription) =>
-        new(subscription.TenantId, subscription.PlanCode, subscription.PlanName, subscription.Status, subscription.TrialEndsAt, subscription.CurrentPeriodEnd, subscription.UpdatedAt);
+        new(subscription.TenantId, subscription.PlanCode, subscription.PlanName, subscription.Status, subscription.TrialEndsAt, subscription.CurrentPeriodEnd, subscription.CreatedAt, subscription.UpdatedAt);
 }
 
 public sealed class SupabaseCompanyRepository(SupabaseDataStore store) : ICompanyRepository
@@ -110,7 +110,16 @@ public sealed class SupabaseAutomationRepository(SupabaseDataStore store) : IAut
 
 public sealed class SupabaseConversationRepository(SupabaseDataStore store) : IConversationRepository
 {
-    public Task<Conversation> GetOrCreateConversationAsync(Guid tenantId, string customerPhone, string? customerName, Guid? channelId = null, CancellationToken cancellationToken = default) => store.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, channelId, cancellationToken);
+    public Task<Conversation> GetOrCreateConversationAsync(
+        Guid tenantId,
+        string customerPhone,
+        string? customerName,
+        Guid? channelId = null,
+        string? qrSessionKey = null,
+        string? qrSessionName = null,
+        string? qrSessionPhone = null,
+        CancellationToken cancellationToken = default) =>
+        store.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, channelId, qrSessionKey, qrSessionName, qrSessionPhone, cancellationToken);
     public Task UpdateConversationCustomerNameAsync(Guid tenantId, Guid conversationId, string customerName, CancellationToken cancellationToken = default) => store.UpdateConversationCustomerNameAsync(tenantId, conversationId, customerName, cancellationToken);
     public Task AddConversationMessageAsync(Guid tenantId, Guid conversationId, string sender, string text, CancellationToken cancellationToken = default) => store.AddConversationMessageAsync(tenantId, conversationId, sender, text, cancellationToken);
     public Task UpdateConversationStatusAsync(Guid tenantId, Guid conversationId, ConversationStatus status, CancellationToken cancellationToken = default) => store.UpdateConversationStatusAsync(tenantId, conversationId, status, cancellationToken);
@@ -118,6 +127,7 @@ public sealed class SupabaseConversationRepository(SupabaseDataStore store) : IC
     public Task<List<Conversation>> GetConversationsWithMessagesAsync(Guid tenantId, CancellationToken cancellationToken = default) => store.GetConversationsWithMessagesAsync(tenantId, cancellationToken);
     public Task<Conversation?> GetConversationByIdAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default) => store.GetConversationByIdAsync(tenantId, conversationId, cancellationToken);
     public Task<string?> GetConversationTransportAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default) => store.GetConversationTransportAsync(tenantId, conversationId, cancellationToken);
+    public Task<int> ClearQrConversationHistoryAsync(Guid tenantId, string? qrSessionKey = null, CancellationToken cancellationToken = default) => store.ClearQrConversationHistoryAsync(tenantId, qrSessionKey, cancellationToken);
 }
 
 public sealed class SupabaseContactRepository(SupabaseDataStore store) : IContactRepository

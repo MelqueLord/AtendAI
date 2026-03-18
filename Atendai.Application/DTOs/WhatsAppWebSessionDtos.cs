@@ -31,6 +31,9 @@ public sealed record SendWhatsAppWebSessionMessageRequest(
     string Message);
 
 public sealed record SyncWhatsAppWebHistoryRequest(
+    string? SessionKey,
+    string? SessionDisplayName,
+    string? SessionPhoneNumber,
     List<SyncWhatsAppWebHistoryChatRequest> Chats);
 
 public sealed record SyncWhatsAppWebHistoryChatRequest(

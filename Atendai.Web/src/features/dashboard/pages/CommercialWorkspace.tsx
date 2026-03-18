@@ -89,6 +89,14 @@ function renderPeriodDetail(subscription: BillingSubscription | null, formatDate
   return `Restam ${subscription.currentPeriodDaysRemaining ?? 0} dia(s) ate ${formatDate(subscription.currentPeriodEnd)}.`;
 }
 
+function renderCreatedAtDetail(subscription: BillingSubscription | null, formatDate: (value: string) => string) {
+  if (!subscription?.createdAt) {
+    return "A empresa ainda nao possui assinatura cadastrada.";
+  }
+
+  return `Plano associado em ${formatDate(subscription.createdAt)}. O vencimento operacional deste cadastro sempre considera 30 dias corridos a partir da data de associacao.`;
+}
+
 export function CommercialWorkspace({
   billingSubscription,
   valueMetrics,
@@ -162,7 +170,7 @@ export function CommercialWorkspace({
 
                 {canSwitchTenant && (
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium text-slate-700">Associar plano a empresa</span>
+                    <span className="text-sm font-medium text-slate-700">Empresa que recebera o plano</span>
                     <select
                       className={inputClass}
                       value={currentTenantId}
@@ -180,6 +188,11 @@ export function CommercialWorkspace({
               </div>
 
               <div className="grid gap-3 lg:col-span-5">
+                <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Data de cadastro</p>
+                  <strong className="mt-2 block text-lg font-semibold text-slate-950">{billingSubscription?.createdAt ? formatDate(billingSubscription.createdAt) : "-"}</strong>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{renderCreatedAtDetail(billingSubscription, formatDate)}</p>
+                </div>
                 <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Periodo de trial</p>
                   <strong className="mt-2 block text-lg font-semibold text-slate-950">{billingSubscription?.trialEndsAt ? formatDate(billingSubscription.trialEndsAt) : "-"}</strong>
@@ -237,7 +250,9 @@ export function CommercialWorkspace({
                       {!isCurrent && plan.isPopular && <StatusPill tone="emerald">Popular</StatusPill>}
                     </div>
                     <p className="text-sm leading-6 text-slate-500">
-                      {canSwitchTenant ? `Aplicar este plano para ${currentTenantName}.` : "Plano aplicado a empresa logada."}
+                      {canSwitchTenant
+                        ? `Associar este plano a ${currentTenantName} e liberar imediatamente os recursos previstos para a empresa selecionada.`
+                        : "Plano aplicado a empresa logada e com validade operacional de 30 dias a partir do cadastro."}
                     </p>
                   </div>
 
@@ -266,7 +281,7 @@ export function CommercialWorkspace({
 
                 <div className="mt-6 flex flex-1 items-end">
                   <button type="button" className={isCurrent ? secondaryButtonClass : primaryButtonClass} onClick={() => subscribePlan(plan.code)} disabled={switchingTenant}>
-                    {isCurrent ? "Plano atual" : canSwitchTenant ? "Aplicar a empresa" : "Assinar plano"}
+                    {isCurrent ? "Plano atual" : canSwitchTenant ? "Associar a empresa" : "Cadastrar plano"}
                   </button>
                 </div>
               </article>

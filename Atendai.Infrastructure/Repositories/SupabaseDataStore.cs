@@ -14,6 +14,8 @@ public sealed partial class SupabaseDataStore
     private const int RecentConversationMessageWindow = 160;
     private const int ConversationSummaryWindow = 180;
     private const int TransientGetRetryCount = 2;
+    private const string ConversationSelectColumnsWithQr = "id,customer_phone,customer_name,status,channel_id,qr_session_key,qr_session_name,qr_session_phone,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)";
+    private const string ConversationSelectColumnsLegacy = "id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)";
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -111,59 +113,27 @@ public sealed partial class SupabaseDataStore
 
     public async Task<List<BillingPlanResponse>> GetBillingPlansAsync(CancellationToken cancellationToken = default)
     {
-        try
+        var rows = await GetBillingPlansRowsWithFallbackAsync(cancellationToken);
+        if (rows.Count == 0)
         {
-            try
-            {
-                var rows = await GetAsync<List<BillingPlanRow>>(
-                    "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_messages,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
-                    cancellationToken);
-
-                return MapBillingPlans(rows);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "billing_plans sem coluna included_messages ou consulta expandida indisponivel. Recuando para o contrato legado.");
-
-                var rows = await GetAsync<List<BillingPlanRow>>(
-                    "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
-                    cancellationToken);
-
-                return MapBillingPlans(rows);
-            }
+            await EnsureDefaultBillingPlansAsync(cancellationToken);
+            rows = await GetBillingPlansRowsWithFallbackAsync(cancellationToken);
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Falha ao carregar billing_plans do Supabase. Usando catalogo padrao em memoria.");
-            return BillingCatalog.DefaultPlans.ToList();
-        }
+
+        return MapBillingPlans(rows);
     }
 
     public async Task<BillingSubscriptionResponse> GetTenantSubscriptionAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var rows = await GetAsync<List<BillingSubscriptionRow>>(
-            $"tenant_subscriptions?tenant_id=eq.{tenantId}&select=tenant_id,plan_code,status,trial_ends_at,current_period_end,updated_at,billing_plans(name)&limit=1",
-            cancellationToken);
+        var rows = await GetTenantSubscriptionRowsAsync(tenantId, cancellationToken);
 
         var row = rows.FirstOrDefault();
         if (row is null)
         {
             var trialEnds = DateTimeOffset.UtcNow.AddDays(14);
-            await PostAsync("tenant_subscriptions", new[]
-            {
-                new
-                {
-                    tenant_id = tenantId,
-                    plan_code = "TRIAL",
-                    status = "trialing",
-                    trial_ends_at = trialEnds,
-                    current_period_end = (DateTimeOffset?)null
-                }
-            }, cancellationToken);
+            await CreateTrialSubscriptionAsync(tenantId, trialEnds, cancellationToken);
 
-            rows = await GetAsync<List<BillingSubscriptionRow>>(
-                $"tenant_subscriptions?tenant_id=eq.{tenantId}&select=tenant_id,plan_code,status,trial_ends_at,current_period_end,updated_at,billing_plans(name)&limit=1",
-                cancellationToken);
+            rows = await GetTenantSubscriptionRowsAsync(tenantId, cancellationToken);
             row = rows.First();
         }
 
@@ -179,34 +149,23 @@ public sealed partial class SupabaseDataStore
 
         var plan = plans.FirstOrDefault() ?? throw new InvalidOperationException("Plano invalido.");
 
-        var existing = await GetAsync<List<BillingSubscriptionRow>>(
-            $"tenant_subscriptions?tenant_id=eq.{tenantId}&select=tenant_id,plan_code,status,trial_ends_at,current_period_end,updated_at,billing_plans(name)&limit=1",
-            cancellationToken);
+        var existing = await GetTenantSubscriptionRowsAsync(tenantId, cancellationToken);
 
         if (existing.Count == 0)
         {
-            await PostAsync("tenant_subscriptions", new[]
-            {
-                new
-                {
-                    tenant_id = tenantId,
-                    plan_code = plan.Code,
-                    status = "active",
-                    trial_ends_at = (DateTimeOffset?)null,
-                    current_period_end = DateTimeOffset.UtcNow.AddDays(30),
-                    updated_at = DateTimeOffset.UtcNow
-                }
-            }, cancellationToken);
+            var createdAt = DateTimeOffset.UtcNow;
+            await CreatePaidSubscriptionAsync(tenantId, plan.Code, createdAt, cancellationToken);
         }
         else
         {
+            var renewedAt = DateTimeOffset.UtcNow;
             await PatchAsync($"tenant_subscriptions?tenant_id=eq.{tenantId}", new
             {
                 plan_code = plan.Code,
                 status = "active",
                 trial_ends_at = (DateTimeOffset?)null,
-                current_period_end = DateTimeOffset.UtcNow.AddDays(30),
-                updated_at = DateTimeOffset.UtcNow
+                current_period_end = renewedAt.AddDays(30),
+                updated_at = renewedAt
             }, cancellationToken);
         }
 
@@ -435,60 +394,148 @@ public sealed partial class SupabaseDataStore
         }, cancellationToken);
     }
 
-    public async Task<Conversation> GetOrCreateConversationAsync(Guid tenantId, string customerPhone, string? customerName, Guid? channelId = null, CancellationToken cancellationToken = default)
+    private async Task<List<ConversationRow>> QueryConversationRowsAsync(string relativeUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await GetAsync<List<ConversationRow>>($"{relativeUrl}&select={ConversationSelectColumnsWithQr}", cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (
+            IsMissingSupabaseColumn(ex, "qr_session_key")
+            || IsMissingSupabaseColumn(ex, "qr_session_name")
+            || IsMissingSupabaseColumn(ex, "qr_session_phone"))
+        {
+            var legacyUrl = StripQrSessionFilter(relativeUrl);
+            return await GetAsync<List<ConversationRow>>($"{legacyUrl}&select={ConversationSelectColumnsLegacy}", cancellationToken);
+        }
+    }
+
+    private async Task<List<ConversationRow>> InsertConversationRowsAsync(object payload, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await PostAsync<List<ConversationRow>>($"conversations?select={ConversationSelectColumnsWithQr}", payload, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (
+            IsMissingSupabaseColumn(ex, "qr_session_key")
+            || IsMissingSupabaseColumn(ex, "qr_session_name")
+            || IsMissingSupabaseColumn(ex, "qr_session_phone"))
+        {
+            return await PostAsync<List<ConversationRow>>($"conversations?select={ConversationSelectColumnsLegacy}", payload, cancellationToken);
+        }
+    }
+
+    public async Task<Conversation> GetOrCreateConversationAsync(
+        Guid tenantId,
+        string customerPhone,
+        string? customerName,
+        Guid? channelId = null,
+        string? qrSessionKey = null,
+        string? qrSessionName = null,
+        string? qrSessionPhone = null,
+        CancellationToken cancellationToken = default)
     {
         var normalizedPhone = NormalizePhone(customerPhone);
         var phoneFilter = BuildPhoneLookupFilter("customer_phone", customerPhone);
         var exactFilter = $"customer_phone=eq.{Uri.EscapeDataString(normalizedPhone)}";
+        var normalizedQrSessionKey = NormalizeQrSessionKey(qrSessionKey, qrSessionPhone);
+        var normalizedQrSessionPhone = NormalizeQrSessionPhone(qrSessionPhone);
         var channelFilter = channelId.HasValue
             ? $"&channel_id=eq.{channelId.Value}"
             : "&channel_id=is.null";
+        var qrSessionFilter = !string.IsNullOrWhiteSpace(normalizedQrSessionKey)
+            ? $"&qr_session_key=eq.{Uri.EscapeDataString(normalizedQrSessionKey)}"
+            : "&qr_session_key=is.null";
         ConversationRow? row = null;
 
         if (!string.IsNullOrWhiteSpace(normalizedPhone))
         {
-            row = (await GetAsync<List<ConversationRow>>(
-                $"conversations?tenant_id=eq.{tenantId}&{exactFilter}{channelFilter}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit=1",
+            row = (await QueryConversationRowsAsync(
+                $"conversations?tenant_id=eq.{tenantId}&{exactFilter}{channelFilter}{qrSessionFilter}&order=updated_at.desc&limit=1",
                 cancellationToken)).FirstOrDefault();
         }
 
         if (row is null && !string.Equals(phoneFilter, exactFilter, StringComparison.Ordinal))
         {
-            row = (await GetAsync<List<ConversationRow>>(
-                $"conversations?tenant_id=eq.{tenantId}&{phoneFilter}{channelFilter}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit=1",
+            row = (await QueryConversationRowsAsync(
+                $"conversations?tenant_id=eq.{tenantId}&{phoneFilter}{channelFilter}{qrSessionFilter}&order=updated_at.desc&limit=1",
                 cancellationToken)).FirstOrDefault();
         }
 
         if (row is null)
         {
-            var insertRows = await PostAsync<List<ConversationRow>>("conversations", new[]
-            {
+            object[] insertPayload =
+            [
                 new
                 {
                     tenant_id = tenantId,
                     customer_phone = normalizedPhone,
                     customer_name = string.IsNullOrWhiteSpace(customerName) ? "Cliente" : customerName,
                     channel_id = channelId,
+                    qr_session_key = normalizedQrSessionKey,
+                    qr_session_name = string.IsNullOrWhiteSpace(qrSessionName) ? null : qrSessionName.Trim(),
+                    qr_session_phone = normalizedQrSessionPhone,
                     status = nameof(ConversationStatus.BotHandling)
                 }
-            }, cancellationToken);
+            ];
+
+            List<ConversationRow> insertRows;
+            try
+            {
+                insertRows = await InsertConversationRowsAsync(insertPayload, cancellationToken);
+            }
+            catch (InvalidOperationException ex) when (
+                IsMissingSupabaseColumn(ex, "qr_session_key")
+                || IsMissingSupabaseColumn(ex, "qr_session_name")
+                || IsMissingSupabaseColumn(ex, "qr_session_phone"))
+            {
+                insertRows = await PostAsync<List<ConversationRow>>($"conversations?select={ConversationSelectColumnsLegacy}", new[]
+                {
+                    new
+                    {
+                        tenant_id = tenantId,
+                        customer_phone = normalizedPhone,
+                        customer_name = string.IsNullOrWhiteSpace(customerName) ? "Cliente" : customerName,
+                        channel_id = channelId,
+                        status = nameof(ConversationStatus.BotHandling)
+                    }
+                }, cancellationToken);
+            }
 
             row = insertRows.First();
         }
-        else if (!string.IsNullOrWhiteSpace(normalizedPhone) && !string.Equals(row.CustomerPhone, normalizedPhone, StringComparison.Ordinal))
+        else if (!string.IsNullOrWhiteSpace(normalizedPhone)
+            && (!string.Equals(row.CustomerPhone, normalizedPhone, StringComparison.Ordinal)
+                || !string.Equals(row.QrSessionName, qrSessionName?.Trim(), StringComparison.Ordinal)
+                || !string.Equals(row.QrSessionPhone, normalizedQrSessionPhone, StringComparison.Ordinal)))
         {
             try
             {
-                await PatchAsync($"conversations?id=eq.{row.Id}&tenant_id=eq.{tenantId}", new
+                var updatePayload = new Dictionary<string, object?>
                 {
-                    customer_phone = normalizedPhone,
-                    updated_at = DateTimeOffset.UtcNow
-                }, cancellationToken);
+                    ["customer_phone"] = normalizedPhone,
+                    ["updated_at"] = DateTimeOffset.UtcNow
+                };
+
+                if (!string.IsNullOrWhiteSpace(normalizedQrSessionKey))
+                {
+                    updatePayload["qr_session_key"] = normalizedQrSessionKey;
+                    updatePayload["qr_session_name"] = string.IsNullOrWhiteSpace(qrSessionName) ? null : qrSessionName.Trim();
+                    updatePayload["qr_session_phone"] = normalizedQrSessionPhone;
+                }
+
+                await PatchAsync($"conversations?id=eq.{row.Id}&tenant_id=eq.{tenantId}", updatePayload, cancellationToken);
                 row.CustomerPhone = normalizedPhone;
+                row.QrSessionKey = normalizedQrSessionKey;
+                row.QrSessionName = string.IsNullOrWhiteSpace(qrSessionName) ? null : qrSessionName.Trim();
+                row.QrSessionPhone = normalizedQrSessionPhone;
             }
             catch (InvalidOperationException ex) when (
                 ex.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
-                ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+                ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
+                IsMissingSupabaseColumn(ex, "qr_session_key") ||
+                IsMissingSupabaseColumn(ex, "qr_session_name") ||
+                IsMissingSupabaseColumn(ex, "qr_session_phone"))
             {
                 // Keep the existing conversation if another row already owns the normalized phone.
             }
@@ -541,15 +588,15 @@ public sealed partial class SupabaseDataStore
 
     public async Task<List<Conversation>> GetConversationSummariesAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var conversations = await GetAsync<List<ConversationRow>>(
-            $"conversations?tenant_id=eq.{tenantId}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc&limit={ConversationSummaryWindow}",
+        var conversations = await QueryConversationRowsAsync(
+            $"conversations?tenant_id=eq.{tenantId}&order=updated_at.desc&limit={ConversationSummaryWindow}",
             cancellationToken);
 
         var result = new List<Conversation>(conversations.Count);
 
         foreach (var row in conversations)
         {
-            result.Add(MapConversation(row, []));
+            result.Add(MapConversation(row, [], ResolveConversationTransport(row)));
         }
 
         return result;
@@ -557,8 +604,8 @@ public sealed partial class SupabaseDataStore
 
     public async Task<List<Conversation>> GetConversationsWithMessagesAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var conversations = await GetAsync<List<ConversationRow>>(
-            $"conversations?tenant_id=eq.{tenantId}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&order=updated_at.desc",
+        var conversations = await QueryConversationRowsAsync(
+            $"conversations?tenant_id=eq.{tenantId}&order=updated_at.desc",
             cancellationToken);
 
         var result = new List<Conversation>(conversations.Count);
@@ -568,7 +615,7 @@ public sealed partial class SupabaseDataStore
             var messages = await GetAsync<List<MessageRow>>(
                 $"conversation_messages?conversation_id=eq.{row.Id}&select=*&order=created_at.asc",
                 cancellationToken);
-            var transport = await GetConversationTransportAsync(tenantId, row.Id, cancellationToken);
+            var transport = ResolveConversationTransport(row) ?? await GetConversationTransportAsync(tenantId, row.Id, cancellationToken);
             result.Add(MapConversation(row, messages, transport));
         }
 
@@ -577,8 +624,8 @@ public sealed partial class SupabaseDataStore
 
     public async Task<Conversation?> GetConversationByIdAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default)
     {
-        var rows = await GetAsync<List<ConversationRow>>(
-            $"conversations?id=eq.{conversationId}&tenant_id=eq.{tenantId}&select=id,customer_phone,customer_name,status,channel_id,assigned_user_id,closed_at,last_customer_message_at,last_human_message_at,created_at,updated_at,users(name),whatsapp_connections(display_name)&limit=1",
+        var rows = await QueryConversationRowsAsync(
+            $"conversations?id=eq.{conversationId}&tenant_id=eq.{tenantId}&limit=1",
             cancellationToken);
 
         var row = rows.FirstOrDefault();
@@ -592,12 +639,21 @@ public sealed partial class SupabaseDataStore
             cancellationToken);
         messages.Reverse();
 
-        var transport = await GetConversationTransportAsync(tenantId, conversationId, cancellationToken);
+        var transport = ResolveConversationTransport(row) ?? await GetConversationTransportAsync(tenantId, conversationId, cancellationToken);
         return MapConversation(row, messages, transport);
     }
 
     public async Task<string?> GetConversationTransportAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default)
     {
+        var conversationRows = await QueryConversationRowsAsync(
+            $"conversations?id=eq.{conversationId}&tenant_id=eq.{tenantId}&limit=1",
+            cancellationToken);
+        var conversationTransport = ResolveConversationTransport(conversationRows.FirstOrDefault());
+        if (!string.IsNullOrWhiteSpace(conversationTransport))
+        {
+            return conversationTransport;
+        }
+
         var rows = await GetAsync<List<ConversationTransportRow>>(
             $"whatsapp_message_logs?tenant_id=eq.{tenantId}&conversation_id=eq.{conversationId}&select=status&order=created_at.desc&limit=1",
             cancellationToken);
@@ -609,6 +665,52 @@ public sealed partial class SupabaseDataStore
         }
 
         return status.Contains("qr", StringComparison.OrdinalIgnoreCase) ? "qr" : "meta";
+    }
+
+    public async Task<int> ClearQrConversationHistoryAsync(Guid tenantId, string? qrSessionKey = null, CancellationToken cancellationToken = default)
+    {
+        var normalizedQrSessionKey = NormalizeQrSessionKey(qrSessionKey, null);
+        List<ConversationIdRow> qrConversationIds;
+
+        if (!string.IsNullOrWhiteSpace(normalizedQrSessionKey))
+        {
+            try
+            {
+                qrConversationIds = await GetAsync<List<ConversationIdRow>>(
+                    $"conversations?tenant_id=eq.{tenantId}&qr_session_key=eq.{Uri.EscapeDataString(normalizedQrSessionKey)}&select=conversation_id:id",
+                    cancellationToken);
+            }
+            catch (InvalidOperationException ex) when (IsMissingSupabaseColumn(ex, "qr_session_key"))
+            {
+                qrConversationIds = await GetAsync<List<ConversationIdRow>>(
+                    $"whatsapp_message_logs?tenant_id=eq.{tenantId}&status=ilike.*qr*&select=conversation_id",
+                    cancellationToken);
+            }
+        }
+        else
+        {
+            qrConversationIds = await GetAsync<List<ConversationIdRow>>(
+                $"whatsapp_message_logs?tenant_id=eq.{tenantId}&status=ilike.*qr*&select=conversation_id",
+                cancellationToken);
+        }
+
+        var conversationIds = qrConversationIds
+            .Where(row => row.ConversationId.HasValue)
+            .Select(row => row.ConversationId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (conversationIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var idsFilter = string.Join(",", conversationIds.Select(id => id.ToString()));
+        await DeleteAsync($"whatsapp_message_logs?tenant_id=eq.{tenantId}&conversation_id=in.({idsFilter})&status=ilike.*qr*", cancellationToken);
+        await DeleteAsync($"conversation_notes?tenant_id=eq.{tenantId}&conversation_id=in.({idsFilter})", cancellationToken);
+        await DeleteAsync($"conversation_messages?conversation_id=in.({idsFilter})", cancellationToken);
+        await DeleteAsync($"conversations?tenant_id=eq.{tenantId}&id=in.({idsFilter})", cancellationToken);
+        return conversationIds.Count;
     }
 
     public async Task<WhatsAppConnectionResponse?> GetWhatsAppConnectionAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -961,6 +1063,7 @@ public sealed partial class SupabaseDataStore
             row.Plan?.Name ?? row.PlanCode,
             row.Status,
             row.Status,
+            row.CreatedAt,
             row.TrialEndsAt,
             null,
             false,
@@ -973,8 +1076,7 @@ public sealed partial class SupabaseDataStore
     {
         if (rows.Count == 0)
         {
-            _logger.LogWarning("billing_plans retornou vazio. Usando catalogo padrao em memoria.");
-            return BillingCatalog.DefaultPlans.ToList();
+            return [];
         }
 
         return rows.Select(r => new BillingPlanResponse(
@@ -986,6 +1088,173 @@ public sealed partial class SupabaseDataStore
             r.IncludedAgents,
             r.IncludedWhatsAppNumbers,
             r.IsPopular)).ToList();
+    }
+
+    private async Task<List<BillingPlanRow>> GetBillingPlansRowsWithFallbackAsync(CancellationToken cancellationToken)
+    {
+        var queries = new[]
+        {
+            "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_messages,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
+            "billing_plans?active=eq.true&select=code,name,monthly_price,currency,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
+            "billing_plans?select=code,name,monthly_price,currency,included_messages,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc",
+            "billing_plans?select=code,name,monthly_price,currency,included_conversations,included_agents,included_whatsapp_numbers,is_popular&order=monthly_price.asc"
+        };
+
+        foreach (var query in queries)
+        {
+            try
+            {
+                return await GetAsync<List<BillingPlanRow>>(query, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Falha ao consultar billing_plans com a query {Query}", query);
+            }
+        }
+
+        return [];
+    }
+
+    private Task EnsureDefaultBillingPlansAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("billing_plans retornou vazio. Publicando catalogo padrao no banco.");
+
+        var payload = BillingCatalog.DefaultPlans.Select(plan => new
+        {
+            code = plan.Code,
+            name = plan.Name,
+            monthly_price = plan.MonthlyPrice,
+            currency = plan.Currency,
+            included_messages = plan.IncludedMessages,
+            included_conversations = plan.IncludedMessages,
+            included_agents = plan.IncludedAgents,
+            included_whatsapp_numbers = plan.IncludedWhatsAppNumbers,
+            is_popular = plan.IsPopular,
+            active = true
+        }).ToList();
+
+        return EnsureDefaultBillingPlansCoreAsync(payload, cancellationToken);
+    }
+
+    private async Task EnsureDefaultBillingPlansCoreAsync(object payload, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await UpsertAsync("billing_plans?on_conflict=code", payload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nao foi possivel publicar billing_plans com o schema novo. Recuando para colunas legadas.");
+            await UpsertAsync(
+                "billing_plans?on_conflict=code",
+                BillingCatalog.DefaultPlans.Select(plan => new
+                {
+                    code = plan.Code,
+                    name = plan.Name,
+                    monthly_price = plan.MonthlyPrice,
+                    currency = plan.Currency,
+                    included_conversations = plan.IncludedMessages,
+                    included_agents = plan.IncludedAgents,
+                    included_whatsapp_numbers = plan.IncludedWhatsAppNumbers,
+                    is_popular = plan.IsPopular
+                }).ToList(),
+                cancellationToken);
+        }
+    }
+
+    private async Task<List<BillingSubscriptionRow>> GetTenantSubscriptionRowsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var queries = new[]
+        {
+            $"tenant_subscriptions?tenant_id=eq.{tenantId}&select=tenant_id,plan_code,status,trial_ends_at,current_period_end,created_at,updated_at,billing_plans(name)&limit=1",
+            $"tenant_subscriptions?tenant_id=eq.{tenantId}&select=tenant_id,plan_code,status,trial_ends_at,current_period_end,updated_at,billing_plans(name)&limit=1"
+        };
+
+        foreach (var query in queries)
+        {
+            try
+            {
+                return await GetAsync<List<BillingSubscriptionRow>>(query, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Falha ao consultar tenant_subscriptions com a query {Query}", query);
+            }
+        }
+
+        return [];
+    }
+
+    private async Task CreateTrialSubscriptionAsync(Guid tenantId, DateTimeOffset trialEnds, CancellationToken cancellationToken)
+    {
+        var createdAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            await PostAsync("tenant_subscriptions", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    plan_code = "TRIAL",
+                    status = "trialing",
+                    trial_ends_at = trialEnds,
+                    current_period_end = (DateTimeOffset?)null,
+                    created_at = createdAt
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nao foi possivel criar tenant_subscriptions com created_at. Recuando para o schema legado.");
+            await PostAsync("tenant_subscriptions", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    plan_code = "TRIAL",
+                    status = "trialing",
+                    trial_ends_at = trialEnds,
+                    current_period_end = (DateTimeOffset?)null
+                }
+            }, cancellationToken);
+        }
+    }
+
+    private async Task CreatePaidSubscriptionAsync(Guid tenantId, string planCode, DateTimeOffset createdAt, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await PostAsync("tenant_subscriptions", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    plan_code = planCode,
+                    status = "active",
+                    trial_ends_at = (DateTimeOffset?)null,
+                    current_period_end = createdAt.AddDays(30),
+                    created_at = createdAt,
+                    updated_at = createdAt
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nao foi possivel criar assinatura com created_at. Recuando para o schema legado.");
+            await PostAsync("tenant_subscriptions", new[]
+            {
+                new
+                {
+                    tenant_id = tenantId,
+                    plan_code = planCode,
+                    status = "active",
+                    trial_ends_at = (DateTimeOffset?)null,
+                    current_period_end = createdAt.AddDays(30),
+                    updated_at = createdAt
+                }
+            }, cancellationToken);
+        }
     }
 
     private static WhatsAppConnectionResponse MapWhatsAppConnection(WhatsAppConnectionRow row)
@@ -1023,9 +1292,12 @@ public sealed partial class SupabaseDataStore
             CustomerPhone = row.CustomerPhone,
             CustomerName = row.CustomerName,
             Status = ParseStatus(row.Status),
-            Transport = transport,
+            Transport = transport ?? ResolveConversationTransport(row),
             ChannelId = row.ChannelId,
             ChannelName = row.WhatsAppChannel?.DisplayName,
+            QrSessionKey = row.QrSessionKey,
+            QrSessionName = row.QrSessionName,
+            QrSessionPhone = row.QrSessionPhone,
             AssignedUserId = row.AssignedUserId,
             AssignedUserName = row.User?.Name,
             LastCustomerMessageAt = row.LastCustomerMessageAt,
@@ -1205,6 +1477,69 @@ public sealed partial class SupabaseDataStore
         return $"or=({clauses})";
     }
 
+    private static string? NormalizeQrSessionPhone(string? qrSessionPhone)
+    {
+        if (string.IsNullOrWhiteSpace(qrSessionPhone))
+        {
+            return null;
+        }
+
+        var normalized = NormalizePhone(qrSessionPhone);
+        return string.IsNullOrWhiteSpace(normalized) ? qrSessionPhone.Trim() : normalized;
+    }
+
+    private static string? NormalizeQrSessionKey(string? qrSessionKey, string? qrSessionPhone)
+    {
+        var normalizedPhone = NormalizeQrSessionPhone(qrSessionPhone);
+        if (!string.IsNullOrWhiteSpace(normalizedPhone))
+        {
+            return normalizedPhone;
+        }
+
+        return string.IsNullOrWhiteSpace(qrSessionKey) ? null : qrSessionKey.Trim();
+    }
+
+    private static string? ResolveConversationTransport(ConversationRow? row)
+    {
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(row.QrSessionKey))
+        {
+            return "qr";
+        }
+
+        if (row.ChannelId.HasValue)
+        {
+            return "meta";
+        }
+
+        return null;
+    }
+
+    private static string StripQrSessionFilter(string relativeUrl)
+    {
+        const string nullFilter = "&qr_session_key=is.null";
+        if (relativeUrl.Contains(nullFilter, StringComparison.Ordinal))
+        {
+            return relativeUrl.Replace(nullFilter, string.Empty, StringComparison.Ordinal);
+        }
+
+        const string prefix = "&qr_session_key=";
+        var start = relativeUrl.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return relativeUrl;
+        }
+
+        var end = relativeUrl.IndexOf('&', start + 1);
+        return end >= 0
+            ? relativeUrl.Remove(start, end - start)
+            : relativeUrl[..start];
+    }
+
     private async Task EnsureSuccess(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
@@ -1274,6 +1609,7 @@ public sealed partial class SupabaseDataStore
         [JsonPropertyName("status")] public string Status { get; set; } = "trialing";
         [JsonPropertyName("trial_ends_at")] public DateTimeOffset? TrialEndsAt { get; set; }
         [JsonPropertyName("current_period_end")] public DateTimeOffset? CurrentPeriodEnd { get; set; }
+        [JsonPropertyName("created_at")] public DateTimeOffset CreatedAt { get; set; }
         [JsonPropertyName("updated_at")] public DateTimeOffset UpdatedAt { get; set; }
         [JsonPropertyName("billing_plans")] public BillingPlanNameRow? Plan { get; set; }
     }
@@ -1310,6 +1646,9 @@ public sealed partial class SupabaseDataStore
         [JsonPropertyName("customer_name")] public string CustomerName { get; set; } = "Cliente";
         [JsonPropertyName("status")] public string Status { get; set; } = nameof(ConversationStatus.BotHandling);
         [JsonPropertyName("channel_id")] public Guid? ChannelId { get; set; }
+        [JsonPropertyName("qr_session_key")] public string? QrSessionKey { get; set; }
+        [JsonPropertyName("qr_session_name")] public string? QrSessionName { get; set; }
+        [JsonPropertyName("qr_session_phone")] public string? QrSessionPhone { get; set; }
         [JsonPropertyName("assigned_user_id")] public Guid? AssignedUserId { get; set; }
         [JsonPropertyName("closed_at")] public DateTimeOffset? ClosedAt { get; set; }
         [JsonPropertyName("last_customer_message_at")] public DateTimeOffset? LastCustomerMessageAt { get; set; }
@@ -1323,6 +1662,11 @@ public sealed partial class SupabaseDataStore
     private sealed class ConversationTransportRow
     {
         [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
+    }
+
+    private sealed class ConversationIdRow
+    {
+        [JsonPropertyName("conversation_id")] public Guid? ConversationId { get; set; }
     }
 
     private sealed class WhatsAppConversationChannelRow

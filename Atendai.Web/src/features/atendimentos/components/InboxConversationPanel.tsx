@@ -1,6 +1,6 @@
 import { EmptyStatePanel, StatusPill, WorkspaceSection, labelClass, primaryButtonClass, secondaryButtonClass, textareaClass } from "@shared/components/WorkspaceUi";
 import type { Dispatch, SetStateAction } from "react";
-import { bubbleClasses, operationSummary, senderLabel, statusTone, transportTone, transitionActionSummary } from "@features/atendimentos/utils/inboxWorkspace";
+import { bubbleClasses, operationSummary, qrSessionLabel, senderLabel, statusTone, transportTone, transitionActionSummary } from "@features/atendimentos/utils/inboxWorkspace";
 import { normalizeConversationStatus } from "@shared/utils/conversation";
 import type { Conversation, QuickReplyTemplate } from "@shared/types";
 
@@ -37,6 +37,7 @@ export function InboxConversationPanel({
   const selectedOperation = selectedConversation ? operationSummary(selectedConversation.status) : null;
   const selectedNormalizedStatus = selectedConversation ? normalizeConversationStatus(selectedConversation.status) : null;
   const selectedTransitions = selectedConversation ? transitionActionSummary(selectedConversation.status) : [];
+  const selectedQrOrigin = selectedConversation ? qrSessionLabel(selectedConversation) : null;
 
   return (
     <WorkspaceSection
@@ -54,6 +55,7 @@ export function InboxConversationPanel({
                 <StatusPill tone={statusTone(selectedConversation.status)}>{selectedOperation?.title}</StatusPill>
                 {statusPendingConversationId === selectedConversation.id && <StatusPill tone="amber">Sincronizando</StatusPill>}
                 {selectedTransportBadge && <StatusPill tone={transportTone(selectedConversation.transport)}>Origem: {selectedTransportBadge}</StatusPill>}
+                {selectedQrOrigin && <StatusPill tone="amber">Sessao QR: {selectedQrOrigin}</StatusPill>}
                 {selectedConversation.channelName && <StatusPill tone="slate">Canal: {selectedConversation.channelName}</StatusPill>}
                 {selectedConversation.assignedUserName && <StatusPill tone="blue">Responsavel: {selectedConversation.assignedUserName}</StatusPill>}
                 <span className="text-xs text-slate-500">Atualizada em {formatDate(selectedConversation.updatedAt)}</span>

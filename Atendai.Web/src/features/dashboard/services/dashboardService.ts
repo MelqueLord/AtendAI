@@ -9,11 +9,19 @@ export function fetchBillingSubscription(token: string) {
   return api.get<BillingSubscription>("/billing/subscription", { token });
 }
 
+export function fetchBillingPlans(token: string) {
+  return api.get<BillingPlan[]>("/billing/plans", { token });
+}
+
+export function fetchValueMetrics(token: string) {
+  return api.get<ValueMetrics>("/billing/value-metrics", { token });
+}
+
 export async function fetchCommercialSnapshot(token: string) {
   const [plans, subscription, valueMetrics] = await Promise.allSettled([
-    api.get<BillingPlan[]>("/billing/plans", { token }),
-    api.get<BillingSubscription>("/billing/subscription", { token }),
-    api.get<ValueMetrics>("/billing/value-metrics", { token })
+    fetchBillingPlans(token),
+    fetchBillingSubscription(token),
+    fetchValueMetrics(token)
   ]);
 
   if (plans.status !== "fulfilled") {

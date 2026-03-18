@@ -1,6 +1,12 @@
 namespace Atendai.Application.DTOs;
 
-public sealed record IncomingMessageRequest(string CustomerPhone, string Message, string? CustomerName);
+public sealed record IncomingMessageRequest(
+    string CustomerPhone,
+    string Message,
+    string? CustomerName,
+    string? QrSessionKey = null,
+    string? QrSessionName = null,
+    string? QrSessionPhone = null);
 public sealed record OutgoingMessageResponse(string Reply, bool EscalatedToHuman, Guid ConversationId);
 public sealed record OutboundConversationRequest(string CustomerPhone, string? CustomerName, string Message, Guid? ChannelId);
 public sealed record OutboundConversationResponse(bool Delivered, string Status, string? Error, string Message, Guid ConversationId);
@@ -19,6 +25,9 @@ public sealed record ConversationResponse(
     string? Transport,
     Guid? ChannelId,
     string? ChannelName,
+    string? QrSessionKey,
+    string? QrSessionName,
+    string? QrSessionPhone,
     Guid? AssignedUserId,
     string? AssignedUserName,
     DateTimeOffset? LastCustomerMessageAt,

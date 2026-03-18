@@ -67,6 +67,24 @@ export function transportTone(transport: string | null) {
   }
 }
 
+export function qrSessionLabel(conversation: Conversation) {
+  if (normalizeTransport(conversation.transport) !== "qr") {
+    return null;
+  }
+
+  if (conversation.qrSessionName?.trim()) {
+    return conversation.qrSessionPhone?.trim()
+      ? `${conversation.qrSessionName} - ${conversation.qrSessionPhone}`
+      : conversation.qrSessionName;
+  }
+
+  if (conversation.qrSessionPhone?.trim()) {
+    return conversation.qrSessionPhone;
+  }
+
+  return conversation.qrSessionKey?.trim() || null;
+}
+
 export function senderLabel(sender: string) {
   const value = sender.toLowerCase();
   if (value.includes("customer")) return "Cliente";

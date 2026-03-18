@@ -46,6 +46,9 @@ export type Conversation = {
   transport: string | null;
   channelId: string | null;
   channelName: string | null;
+  qrSessionKey: string | null;
+  qrSessionName: string | null;
+  qrSessionPhone: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
   lastCustomerMessageAt: string | null;
@@ -123,6 +126,7 @@ export type BillingSubscription = {
   planName: string;
   status: string;
   effectiveStatus: string;
+  createdAt: string;
   trialEndsAt: string | null;
   trialDaysRemaining: number | null;
   isTrialExpired: boolean;

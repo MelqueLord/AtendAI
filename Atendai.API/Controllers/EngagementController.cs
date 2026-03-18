@@ -11,6 +11,7 @@ namespace Atendai.API.Controllers;
 [Authorize(Roles = "Admin,SuperAdmin")]
 public sealed class EngagementController(
     ITenantWhatsAppService tenantWhatsAppService,
+    IConversationService conversationService,
     ICampaignAutomationService campaignAutomationService,
     IWhatsAppWebSessionService whatsAppWebSessionService) : ControllerBase
 {
@@ -232,7 +233,22 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
+        var currentState = await whatsAppWebSessionService.GetStateAsync(tenantId.Value, cancellationToken);
+        var qrSessionKey = !string.IsNullOrWhiteSpace(currentState.PhoneNumber)
+            ? currentState.PhoneNumber
+            : currentState.SessionId;
         var result = await whatsAppWebSessionService.DisconnectAsync(tenantId.Value, cancellationToken);
+        if (result.Success)
+        {
+            var removedConversations = await conversationService.ClearWhatsAppWebHistoryAsync(tenantId.Value, qrSessionKey, cancellationToken);
+            return Ok(result with
+            {
+                Message = removedConversations > 0
+                    ? $"{result.Message} Historico QR limpo com {removedConversations} conversa(s) removida(s) para evitar mistura com um novo numero."
+                    : $"{result.Message} Nenhuma conversa QR precisava ser removida."
+            });
+        }
+
         return Ok(result);
     }
 

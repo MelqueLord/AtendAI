@@ -16,6 +16,7 @@ public sealed record BillingSubscriptionResponse(
     string PlanName,
     string Status,
     string EffectiveStatus,
+    DateTimeOffset CreatedAt,
     DateTimeOffset? TrialEndsAt,
     int? TrialDaysRemaining,
     bool IsTrialExpired,

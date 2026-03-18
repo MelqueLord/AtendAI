@@ -15,6 +15,7 @@ import {
   lastMessagePreview,
   operationSummary,
   queueFilters,
+  qrSessionLabel,
   queueRowHeight,
   queueSectionMeta,
   statusLabel,
@@ -84,6 +85,7 @@ export function InboxQueueSection({
   function renderConversationCard(conversation: Conversation) {
     const isActive = selectedConversationId === conversation.id;
     const transportBadge = transportLabel(conversation.transport);
+    const qrOriginLabel = qrSessionLabel(conversation);
     const summary = operationSummary(conversation.status);
     const statusKey = conversation.status;
     const isBusy = statusPendingConversationId === conversation.id || assignmentPendingConversationId === conversation.id;
@@ -118,6 +120,7 @@ export function InboxQueueSection({
           <StatusPill tone={statusTone(conversation.status)}>Modo: {statusLabel(conversation.status)}</StatusPill>
           <StatusPill tone={attention.tone}>{attention.label}</StatusPill>
           {transportBadge && <StatusPill tone={transportTone(conversation.transport)}>{transportBadge}</StatusPill>}
+          {qrOriginLabel && <StatusPill tone="amber">Sessao: {qrOriginLabel}</StatusPill>}
           {conversation.channelName && <StatusPill tone="slate">{conversation.channelName}</StatusPill>}
           {conversation.assignedUserName && <StatusPill tone="blue">{conversation.assignedUserName}</StatusPill>}
         </div>

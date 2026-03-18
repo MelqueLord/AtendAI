@@ -233,6 +233,7 @@ export function AppRouter() {
 
   const canManage = auth?.role === "Admin" || auth?.role === "SuperAdmin";
   const canManageCompanies = auth?.role === "SuperAdmin";
+  const tenantScopeKey = auth ? `${auth.tenantId}:${auth.token}` : "";
   const workspaceName = settings?.businessName?.trim() || auth?.tenantName || "Workspace";
   const workspacePlanName = billingSubscription?.planName?.trim() || "Sem plano contratado";
 
@@ -261,6 +262,7 @@ export function AppRouter() {
     saveConversationContactPanel: saveConversationContactPanelData
   } = useAttendanceWorkspaceData({
     authToken: auth?.token,
+    tenantScopeKey,
     conversations,
     setConversations,
     selectedId,
@@ -543,6 +545,7 @@ export function AppRouter() {
   useAttendanceRealtimeSync({
     apiBase,
     authToken: auth?.token,
+    tenantScopeKey,
     currentPage,
     selectedIdRef,
     loadConversationDetail,

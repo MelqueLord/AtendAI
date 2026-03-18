@@ -17,6 +17,7 @@ public sealed record BillingSubscription(
     string Status,
     DateTimeOffset? TrialEndsAt,
     DateTimeOffset? CurrentPeriodEnd,
+    DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
 public sealed record Contact(

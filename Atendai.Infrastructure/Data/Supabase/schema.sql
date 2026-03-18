@@ -60,6 +60,7 @@ CREATE TABLE public.tenant_subscriptions (
   status text NOT NULL DEFAULT 'trialing',
   trial_ends_at timestamptz NULL,
   current_period_end timestamptz NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -124,6 +125,9 @@ CREATE TABLE public.conversations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   channel_id uuid NULL,
+  qr_session_key text NULL,
+  qr_session_name text NULL,
+  qr_session_phone text NULL,
   customer_phone text NOT NULL,
   customer_name text NOT NULL DEFAULT 'Cliente',
   status text NOT NULL DEFAULT 'BotHandling',
@@ -135,8 +139,9 @@ CREATE TABLE public.conversations (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX ux_conversations_tenant_phone_channel ON public.conversations(tenant_id, customer_phone, coalesce(channel_id, '00000000-0000-0000-0000-000000000000'::uuid));
+CREATE UNIQUE INDEX ux_conversations_tenant_phone_channel ON public.conversations(tenant_id, customer_phone, coalesce(channel_id, '00000000-0000-0000-0000-000000000000'::uuid), coalesce(qr_session_key, ''));
 CREATE INDEX idx_conversations_tenant_channel_updated ON public.conversations(tenant_id, channel_id, updated_at DESC);
+CREATE INDEX idx_conversations_tenant_qr_session_updated ON public.conversations(tenant_id, qr_session_key, updated_at DESC);
 
 CREATE TABLE public.conversation_messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

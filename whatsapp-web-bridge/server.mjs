@@ -489,7 +489,8 @@ async function ensureSession(tenantId, options = {}) {
       await notifyBackendIncomingMessage(tenantId, {
         customerPhone,
         customerName,
-        message: text
+        message: text,
+        session
       });
     }
   });
@@ -727,6 +728,9 @@ async function pushChatHistoryToBackend(tenantId, session) {
         ...(BACKEND_CALLBACK_KEY ? { "X-Atendai-Bridge-Key": BACKEND_CALLBACK_KEY } : {})
       },
       body: JSON.stringify({
+        sessionKey: buildQrSessionKey(session),
+        sessionDisplayName: session.displayName,
+        sessionPhoneNumber: session.phoneNumber,
         chats: chats.map((chat) => ({
           customerPhone: chat.customerPhone,
           customerName: chat.customerName,
@@ -1289,6 +1293,10 @@ function extractMessageText(message) {
   return "";
 }
 
+function buildQrSessionKey(session) {
+  return normalizeSocketUser(session?.phoneNumber || "") || session?.sessionId || session?.tenantId || "";
+}
+
 async function notifyBackendIncomingMessage(tenantId, payload) {
   if (!BACKEND_CALLBACK_BASE_URL) {
     return;
@@ -1304,7 +1312,10 @@ async function notifyBackendIncomingMessage(tenantId, payload) {
       body: JSON.stringify({
         customerPhone: payload.customerPhone,
         customerName: payload.customerName,
-        message: payload.message
+        message: payload.message,
+        qrSessionKey: buildQrSessionKey(payload.session || {}),
+        qrSessionName: payload.session?.displayName || null,
+        qrSessionPhone: payload.session?.phoneNumber || null
       })
     });
 

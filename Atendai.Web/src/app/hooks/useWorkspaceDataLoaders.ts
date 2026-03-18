@@ -1,7 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { fetchBotSettings } from "@features/ai/services/aiService";
 import { fetchCrmSnapshot } from "@features/clientes/services/clientesService";
-import { fetchAnalyticsOverview, fetchBillingSubscription, fetchCommercialSnapshot } from "@features/dashboard/services/dashboardService";
+import { fetchAnalyticsOverview, fetchBillingPlans, fetchBillingSubscription, fetchValueMetrics } from "@features/dashboard/services/dashboardService";
 import { fetchManagedCompanies } from "@features/empresas/services/companyManagementService";
 import { fetchTenants } from "@features/auth/services/authService";
 import { fetchManagedUsers as fetchManagedUsersRequest } from "@features/usuarios/services/userManagementService";
@@ -194,13 +194,25 @@ export function useWorkspaceDataLoaders({
     }
 
     try {
-      const snapshot = await fetchCommercialSnapshot(token);
-      setBillingPlans(snapshot.plans);
-      setBillingSubscription(snapshot.subscription);
-      setValueMetrics(snapshot.valueMetrics);
+      const [plans, subscription] = await Promise.all([
+        fetchBillingPlans(token),
+        fetchBillingSubscription(token).catch(() => null)
+      ]);
+
+      setBillingPlans(plans);
+      setBillingSubscription(subscription);
     } catch (error) {
       setError(resolveApiErrorMessage(error, "Erro ao carregar dados comerciais."));
+      return;
     }
+
+    void fetchValueMetrics(token)
+      .then((metrics) => {
+        setValueMetrics(metrics);
+      })
+      .catch((error) => {
+        setError(resolveApiErrorMessage(error, "Erro ao carregar metricas comerciais."));
+      });
   }, [authRole, authToken, setBillingPlans, setBillingSubscription, setError, setValueMetrics]);
 
   const loadEngagement = useCallback(async (token = authToken, role = authRole) => {

@@ -6,6 +6,7 @@ import { createAttendanceHubConnection, type AttendanceRefreshPayload } from "@i
 type UseAttendanceRealtimeSyncParams = {
   apiBase: string;
   authToken?: string;
+  tenantScopeKey?: string;
   currentPage: AppPage;
   selectedIdRef: MutableRefObject<string>;
   loadConversationDetail: (conversationId: string, token?: string, options?: { background?: boolean }) => Promise<unknown>;
@@ -19,6 +20,7 @@ type UseAttendanceRealtimeSyncParams = {
 export function useAttendanceRealtimeSync({
   apiBase,
   authToken,
+  tenantScopeKey,
   currentPage,
   selectedIdRef,
   loadConversationDetail,
@@ -31,6 +33,7 @@ export function useAttendanceRealtimeSync({
   const loadConversationDetailRef = useRef(loadConversationDetail);
   const loadConversationsRef = useRef(loadConversations);
   const loadConversationNotesRef = useRef(loadConversationNotes);
+  const tenantScopeRef = useRef(tenantScopeKey ?? "");
 
   useEffect(() => {
     loadConversationDetailRef.current = loadConversationDetail;
@@ -45,6 +48,10 @@ export function useAttendanceRealtimeSync({
   }, [loadConversationNotes]);
 
   useEffect(() => {
+    tenantScopeRef.current = tenantScopeKey ?? "";
+  }, [tenantScopeKey]);
+
+  useEffect(() => {
     if (!authToken || currentPage !== "ATTENDANCE") {
       setAttendanceRealtimeState("disconnected");
       return;
@@ -52,9 +59,10 @@ export function useAttendanceRealtimeSync({
 
     let cancelled = false;
     const connection = createAttendanceHubConnection(apiBase, authToken);
+    const scopeSnapshot = tenantScopeRef.current;
 
     const refreshFromRealtime = async (payload?: AttendanceRefreshPayload) => {
-      if (cancelled) {
+      if (cancelled || tenantScopeRef.current !== scopeSnapshot) {
         return;
       }
 
@@ -65,6 +73,10 @@ export function useAttendanceRealtimeSync({
 
       if (payload?.conversationId) {
         const refreshedConversation = await loadConversationDetailRef.current(payload.conversationId, authToken, { background: true });
+        if (cancelled || tenantScopeRef.current !== scopeSnapshot) {
+          return;
+        }
+
         if (!refreshedConversation) {
           await loadConversationsRef.current(authToken, { background: true });
         }
@@ -77,6 +89,10 @@ export function useAttendanceRealtimeSync({
       }
 
       await loadConversationsRef.current(authToken, { background: true });
+      if (cancelled || tenantScopeRef.current !== scopeSnapshot) {
+        return;
+      }
+
       if (selectedIdRef.current) {
         await Promise.all([
           loadConversationDetailRef.current(selectedIdRef.current, authToken, { background: true }),
@@ -139,6 +155,7 @@ export function useAttendanceRealtimeSync({
     authToken,
     currentPage,
     selectedIdRef,
+    tenantScopeKey,
     setAttendanceRealtimeLastPublishedAt,
     setAttendanceRealtimeLastReceivedAt,
     setAttendanceRealtimeState

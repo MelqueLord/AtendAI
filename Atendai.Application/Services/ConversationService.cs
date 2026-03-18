@@ -41,7 +41,19 @@ public sealed class ConversationService(
         var customerName = await ResolveCustomerNameAsync(tenantId, customerPhone, request.CustomerName, cancellationToken);
         await crmService.EnsureContactExistsAsync(tenantId, customerPhone, customerName, cancellationToken);
 
-        var conversation = await conversationRepository.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, channelId, cancellationToken);
+        var qrSessionKey = string.Equals(transport, "qr", StringComparison.OrdinalIgnoreCase) ? request.QrSessionKey : null;
+        var qrSessionName = string.Equals(transport, "qr", StringComparison.OrdinalIgnoreCase) ? request.QrSessionName : null;
+        var qrSessionPhone = string.Equals(transport, "qr", StringComparison.OrdinalIgnoreCase) ? request.QrSessionPhone : null;
+
+        var conversation = await conversationRepository.GetOrCreateConversationAsync(
+            tenantId,
+            customerPhone,
+            customerName,
+            channelId,
+            qrSessionKey,
+            qrSessionName,
+            qrSessionPhone,
+            cancellationToken);
         if (CustomerIdentityResolver.ShouldReplaceStoredName(conversation.CustomerName, customerName, customerPhone))
         {
             await conversationRepository.UpdateConversationCustomerNameAsync(tenantId, conversation.Id, customerName, cancellationToken);
@@ -137,7 +149,15 @@ public sealed class ConversationService(
 
             await crmService.EnsureContactExistsAsync(tenantId, customerPhone, customerName, cancellationToken);
 
-            var conversation = await conversationRepository.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, null, cancellationToken);
+            var conversation = await conversationRepository.GetOrCreateConversationAsync(
+                tenantId,
+                customerPhone,
+                customerName,
+                null,
+                request.SessionKey,
+                request.SessionDisplayName,
+                request.SessionPhoneNumber,
+                cancellationToken);
             if (CustomerIdentityResolver.ShouldReplaceStoredName(conversation.CustomerName, customerName, customerPhone))
             {
                 await conversationRepository.UpdateConversationCustomerNameAsync(tenantId, conversation.Id, customerName, cancellationToken);
@@ -192,6 +212,13 @@ public sealed class ConversationService(
         return new SyncWhatsAppWebHistoryResponse(imported, skipped, chats.Count);
     }
 
+    public async Task<int> ClearWhatsAppWebHistoryAsync(Guid tenantId, string? qrSessionKey = null, CancellationToken cancellationToken = default)
+    {
+        var removedConversations = await conversationRepository.ClearQrConversationHistoryAsync(tenantId, qrSessionKey, cancellationToken);
+        await realtimeNotifier.NotifyInboxChangedAsync(tenantId, null, cancellationToken);
+        return removedConversations;
+    }
+
     public async Task<OutboundConversationResponse> StartOutboundConversationAsync(Guid tenantId, OutboundConversationRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.CustomerPhone) || string.IsNullOrWhiteSpace(request.Message))
@@ -205,7 +232,12 @@ public sealed class ConversationService(
 
         await crmService.EnsureContactExistsAsync(tenantId, customerPhone, customerName, cancellationToken);
 
-        var conversation = await conversationRepository.GetOrCreateConversationAsync(tenantId, customerPhone, customerName, request.ChannelId, cancellationToken);
+        var conversation = await conversationRepository.GetOrCreateConversationAsync(
+            tenantId,
+            customerPhone,
+            customerName,
+            request.ChannelId,
+            cancellationToken: cancellationToken);
         if (CustomerIdentityResolver.ShouldReplaceStoredName(conversation.CustomerName, customerName, customerPhone))
         {
             await conversationRepository.UpdateConversationCustomerNameAsync(tenantId, conversation.Id, customerName, cancellationToken);
@@ -353,6 +385,9 @@ private async Task<string> ResolveCustomerNameAsync(Guid tenantId, string custom
             conversation.Transport,
             conversation.ChannelId,
             conversation.ChannelName,
+            conversation.QrSessionKey,
+            conversation.QrSessionName,
+            conversation.QrSessionPhone,
             conversation.AssignedUserId,
             conversation.AssignedUserName,
             conversation.LastCustomerMessageAt,

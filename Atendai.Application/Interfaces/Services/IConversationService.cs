@@ -9,6 +9,7 @@ public interface IConversationService
     Task<OutgoingMessageResponse> HandleIncomingAsync(Guid tenantId, IncomingMessageRequest request, Guid? channelId = null, string transport = "meta", CancellationToken cancellationToken = default);
     Task HandleAutomaticReplyDeliveryFailureAsync(Guid tenantId, Guid conversationId, string status, string? error, CancellationToken cancellationToken = default);
     Task<SyncWhatsAppWebHistoryResponse> ImportWhatsAppWebHistoryAsync(Guid tenantId, SyncWhatsAppWebHistoryRequest request, CancellationToken cancellationToken = default);
+    Task<int> ClearWhatsAppWebHistoryAsync(Guid tenantId, string? qrSessionKey = null, CancellationToken cancellationToken = default);
     Task<OutboundConversationResponse> StartOutboundConversationAsync(Guid tenantId, OutboundConversationRequest request, CancellationToken cancellationToken = default);
     Task<HumanReplyDispatchResponse?> SendHumanReplyAsync(Guid tenantId, Guid conversationId, string message, CancellationToken cancellationToken = default);
     Task<ConversationResponse?> UpdateAssignmentAsync(Guid tenantId, Guid conversationId, Guid? assignedUserId, CancellationToken cancellationToken = default);

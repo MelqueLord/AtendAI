@@ -1,4 +1,4 @@
-import { startTransition, useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { startTransition, useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { fetchContacts as fetchCrmContacts, saveContact as saveContactRequest } from "@features/clientes/services/clientesService";
 import {
   fetchConversationById,
@@ -11,6 +11,7 @@ import type { Contact, Conversation, ConversationNote, QuickReplyTemplate } from
 
 type AttendanceWorkspaceDataParams = {
   authToken?: string;
+  tenantScopeKey?: string;
   conversations: Conversation[];
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
   selectedId: string;
@@ -35,6 +36,7 @@ type AttendanceWorkspaceDataParams = {
 
 export function useAttendanceWorkspaceData({
   authToken,
+  tenantScopeKey,
   conversations,
   setConversations,
   selectedId,
@@ -56,6 +58,13 @@ export function useAttendanceWorkspaceData({
   setQuickReplies,
   setError
 }: AttendanceWorkspaceDataParams) {
+  const tenantScopeRef = useRef(tenantScopeKey ?? "");
+
+  useEffect(() => {
+    tenantScopeRef.current = tenantScopeKey ?? "";
+  }, [tenantScopeKey]);
+
+  const isScopeCurrent = useCallback((scopeSnapshot: string) => tenantScopeRef.current === scopeSnapshot, []);
   const cloneConversationSnapshot = useCallback((conversation: Conversation) => {
     return {
       ...conversation,
@@ -121,6 +130,8 @@ export function useAttendanceWorkspaceData({
       return;
     }
 
+    const scopeSnapshot = tenantScopeRef.current;
+
     const shouldRefreshInBackground = options?.background ?? conversations.length > 0;
     conversationsAbortRef.current?.abort();
     const controller = new AbortController();
@@ -134,6 +145,10 @@ export function useAttendanceWorkspaceData({
 
     try {
       const data = await fetchConversationQueue(token, controller.signal);
+      if (!isScopeCurrent(scopeSnapshot)) {
+        return;
+      }
+
       const hydratedConversations = data.map((conversation) => {
         const cachedConversation = conversationDetailCacheRef.current.get(conversation.id);
         return cachedConversation ? { ...conversation, messages: cachedConversation.messages } : conversation;
@@ -152,12 +167,12 @@ export function useAttendanceWorkspaceData({
         setSelectedConversationDetail(conversationDetailCacheRef.current.get(hydratedConversations[0].id) ?? null);
       }
     } catch (error) {
-      if (!isAbortError(error)) {
+      if (!isAbortError(error) && isScopeCurrent(scopeSnapshot)) {
         setError(resolveApiErrorMessage(error, "Erro de conexao ao buscar conversas."));
       }
     } finally {
       const isCurrentRequest = conversationsAbortRef.current === controller;
-      if (isCurrentRequest) {
+      if (isCurrentRequest && isScopeCurrent(scopeSnapshot)) {
         conversationsAbortRef.current = null;
         setAttendanceQueueLoading(false);
         setAttendanceQueueRefreshing(false);
@@ -168,6 +183,7 @@ export function useAttendanceWorkspaceData({
     conversationDetailCacheRef,
     conversations.length,
     conversationsAbortRef,
+    isScopeCurrent,
     selectedIdRef,
     setAttendanceQueueLoading,
     setAttendanceQueueRefreshing,
@@ -194,6 +210,8 @@ export function useAttendanceWorkspaceData({
       return null;
     }
 
+    const scopeSnapshot = tenantScopeRef.current;
+
     conversationDetailAbortRef.current?.abort();
     const controller = new AbortController();
     conversationDetailAbortRef.current = controller;
@@ -204,17 +222,21 @@ export function useAttendanceWorkspaceData({
 
     try {
       const data = await fetchConversationById(token, conversationId, controller.signal);
+      if (!isScopeCurrent(scopeSnapshot)) {
+        return null;
+      }
+
       mergeConversationIntoAttendanceState(data);
       return data;
     } catch (error) {
-      if (!isAbortError(error) && selectedIdRef.current === conversationId) {
+      if (!isAbortError(error) && isScopeCurrent(scopeSnapshot) && selectedIdRef.current === conversationId) {
         setSelectedConversationDetail(conversationDetailCacheRef.current.get(conversationId) ?? null);
       }
 
       return null;
     } finally {
       const isCurrentRequest = conversationDetailAbortRef.current === controller;
-      if (isCurrentRequest) {
+      if (isCurrentRequest && isScopeCurrent(scopeSnapshot)) {
         conversationDetailAbortRef.current = null;
         setAttendanceConversationLoading(false);
       }
@@ -223,6 +245,7 @@ export function useAttendanceWorkspaceData({
     authToken,
     conversationDetailAbortRef,
     conversationDetailCacheRef,
+    isScopeCurrent,
     mergeConversationIntoAttendanceState,
     selectedIdRef,
     setAttendanceConversationLoading,
@@ -234,6 +257,8 @@ export function useAttendanceWorkspaceData({
       return;
     }
 
+    const scopeSnapshot = tenantScopeRef.current;
+
     conversationNotesAbortRef.current?.abort();
     const controller = new AbortController();
     conversationNotesAbortRef.current = controller;
@@ -244,17 +269,21 @@ export function useAttendanceWorkspaceData({
 
     try {
       const data = await fetchConversationNotesRequest(token, conversationId, controller.signal);
+      if (!isScopeCurrent(scopeSnapshot)) {
+        return;
+      }
+
       conversationNotesCacheRef.current.set(conversationId, data);
       if (selectedIdRef.current === conversationId) {
         setConversationNotes(data);
       }
     } catch (error) {
-      if (!isAbortError(error) && selectedIdRef.current === conversationId) {
+      if (!isAbortError(error) && isScopeCurrent(scopeSnapshot) && selectedIdRef.current === conversationId) {
         setConversationNotes(conversationNotesCacheRef.current.get(conversationId) ?? []);
       }
     } finally {
       const isCurrentRequest = conversationNotesAbortRef.current === controller;
-      if (isCurrentRequest) {
+      if (isCurrentRequest && isScopeCurrent(scopeSnapshot)) {
         conversationNotesAbortRef.current = null;
         setAttendanceNotesLoading(false);
       }
@@ -263,6 +292,7 @@ export function useAttendanceWorkspaceData({
     authToken,
     conversationNotesAbortRef,
     conversationNotesCacheRef,
+    isScopeCurrent,
     selectedIdRef,
     setAttendanceNotesLoading,
     setConversationNotes
@@ -315,6 +345,8 @@ export function useAttendanceWorkspaceData({
       return null;
     }
 
+    const scopeSnapshot = tenantScopeRef.current;
+
     const savedContact = await saveContactRequest(token, {
       id: contactDraft.id || undefined,
       name: contactDraft.name,
@@ -326,11 +358,14 @@ export function useAttendanceWorkspaceData({
     });
 
     if (savedContact) {
+      if (!isScopeCurrent(scopeSnapshot)) {
+        return savedContact;
+      }
       mergeContactIntoState(savedContact);
     }
 
     return savedContact;
-  }, [authToken, mergeContactIntoState]);
+  }, [authToken, isScopeCurrent, mergeContactIntoState]);
 
   return {
     cloneConversationSnapshot,

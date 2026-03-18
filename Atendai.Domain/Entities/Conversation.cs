@@ -9,6 +9,9 @@ public sealed class Conversation
     public string? Transport { get; set; }
     public Guid? ChannelId { get; set; }
     public string? ChannelName { get; set; }
+    public string? QrSessionKey { get; set; }
+    public string? QrSessionName { get; set; }
+    public string? QrSessionPhone { get; set; }
     public Guid? AssignedUserId { get; set; }
     public string? AssignedUserName { get; set; }
     public DateTimeOffset? LastCustomerMessageAt { get; set; }
