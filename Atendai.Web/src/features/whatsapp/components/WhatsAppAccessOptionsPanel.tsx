@@ -22,6 +22,8 @@ type WhatsAppAccessOptionsPanelProps = {
   metaDetail: string;
   metaFootnote: string | null;
   metaMessage: string;
+  qrSessions: WhatsAppWebSessionState[];
+  selectedQrSessionId: string;
   qrSession: WhatsAppWebSessionState | null;
   qrBusy: boolean;
   qrStatusLabel: string;
@@ -41,6 +43,8 @@ type WhatsAppAccessOptionsPanelProps = {
   onLaunchEmbeddedSignup: () => Promise<void>;
   onTestMetaConnection: () => Promise<void>;
   onSurfaceQrConfigurationError: () => void;
+  onCreateQrSession: () => Promise<void>;
+  onSelectQrSession: (sessionId: string) => void;
   onSyncQrHistory: () => Promise<void>;
   onStartQrSession: (forceRestart?: boolean) => Promise<void>;
   onDisconnectQrSession: () => Promise<void>;
@@ -60,6 +64,8 @@ export function WhatsAppAccessOptionsPanel({
   metaDetail,
   metaFootnote,
   metaMessage,
+  qrSessions,
+  selectedQrSessionId,
   qrSession,
   qrBusy,
   qrStatusLabel,
@@ -79,6 +85,8 @@ export function WhatsAppAccessOptionsPanel({
   onLaunchEmbeddedSignup,
   onTestMetaConnection,
   onSurfaceQrConfigurationError,
+  onCreateQrSession,
+  onSelectQrSession,
   onSyncQrHistory,
   onStartQrSession,
   onDisconnectQrSession,
@@ -185,7 +193,7 @@ export function WhatsAppAccessOptionsPanel({
               <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-semibold text-white shadow-sm shadow-blue-200">QR</span>
               <div className="space-y-1">
                 <h3 className="text-xl font-semibold tracking-tight text-slate-950">Sessao QR experimental</h3>
-                <p className="max-w-2xl text-sm leading-6 text-slate-600">Use uma unica sessao operacional para conectar o WhatsApp Web, parear por QR e sincronizar conversas recentes no CRM.</p>
+                <p className="max-w-2xl text-sm leading-6 text-slate-600">Crie uma ou mais sessoes QR para conectar numeros diferentes do WhatsApp Web, parear por QR e sincronizar conversas recentes no CRM.</p>
               </div>
             </div>
             <StatusPill tone={qrStatusTone}>{qrStatusLabel}</StatusPill>
@@ -193,6 +201,49 @@ export function WhatsAppAccessOptionsPanel({
         </div>
 
         <div className="space-y-5 px-6 py-6">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-950">Sessoes QR</p>
+              <p className="text-xs leading-5 text-slate-500">Selecione a sessao que deseja operar ou crie um novo QR para outro numero.</p>
+            </div>
+            <button type="button" className={secondaryButtonClass} onClick={() => void onCreateQrSession()} disabled={qrBusy}>
+              Novo QR
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {qrSessions.length > 0 ? qrSessions.map((session) => {
+              const isSelected = selectedQrSessionId === (session.sessionId ?? "");
+              return (
+                <button
+                  key={session.sessionId ?? `session-${session.displayName ?? "qr"}`}
+                  type="button"
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${isSelected ? "border-slate-900 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-900 hover:border-slate-300"}`}
+                  onClick={() => onSelectQrSession(session.sessionId ?? "")}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-950"}`}>{session.displayName || "WhatsApp QR"}</p>
+                      <p className={`text-xs ${isSelected ? "text-slate-300" : "text-slate-500"}`}>{session.phoneNumber || session.sessionId || "Sessao sem numero conectado"}</p>
+                    </div>
+                    <StatusPill tone={
+                      session.status === "connected" ? "emerald"
+                        : session.status === "awaiting_scan" || session.status === "qr_ready" || session.status === "starting" || session.status === "connecting" ? "amber"
+                          : session.status === "error" || session.status === "bridge_error" || session.status === "bridge_unreachable" ? "rose"
+                            : "slate"
+                    }>
+                      {session.status}
+                    </StatusPill>
+                  </div>
+                </button>
+              );
+            }) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-5 text-sm text-slate-500 sm:col-span-2">
+                Nenhuma sessao QR criada ainda. Clique em <span className="font-semibold text-slate-700">Novo QR</span> para adicionar o primeiro numero.
+              </div>
+            )}
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
             <p className="text-sm font-medium leading-6 text-slate-700">{qrHelper}</p>
             <p className="mt-2 text-sm leading-6 text-slate-500">{qrFootnote}</p>
@@ -302,6 +353,10 @@ export function WhatsAppAccessOptionsPanel({
               </>
             )}
           </div>
+
+          <p className="text-xs leading-5 text-slate-500">
+            Cada sessao QR representa um numero conectado via WhatsApp Web. O atendimento separa as conversas por sessao para evitar mistura entre numeros diferentes.
+          </p>
         </div>
       </article>
 

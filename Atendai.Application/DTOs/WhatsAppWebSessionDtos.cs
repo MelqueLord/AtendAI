@@ -16,9 +16,13 @@ public sealed record WhatsAppWebSessionStateResponse(
     int CachedChatsCount,
     DateTimeOffset? LastHistorySyncAt);
 
+public sealed record WhatsAppWebSessionListResponse(
+    List<WhatsAppWebSessionStateResponse> Sessions);
+
 public sealed record StartWhatsAppWebSessionRequest(
     string? DisplayName,
-    bool ForceRestart);
+    bool ForceRestart,
+    string? SessionId = null);
 
 public sealed record WhatsAppWebSessionActionResponse(
     bool Success,

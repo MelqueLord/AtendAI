@@ -5,7 +5,9 @@ export const queueFilters: Array<{ value: QueueFilter; label: string }> = [
   { value: "ALL", label: "Todas" },
   { value: "WAITING_HUMAN", label: "Fila humana" },
   { value: "BOT", label: "IA" },
-  { value: "HUMAN", label: "Humano" }
+  { value: "HUMAN", label: "Humano" },
+  { value: "META", label: "Meta" },
+  { value: "QR", label: "QR" }
 ];
 
 export const queueRowHeight = 228;
@@ -83,6 +85,36 @@ export function qrSessionLabel(conversation: Conversation) {
   }
 
   return conversation.qrSessionKey?.trim() || null;
+}
+
+export function sourceScopeKey(conversation: Conversation) {
+  const transport = normalizeTransport(conversation.transport);
+  if (transport === "meta") {
+    return conversation.channelId?.trim()
+      ? `meta:${conversation.channelId}`
+      : `meta:${conversation.channelName?.trim() || "principal"}`;
+  }
+
+  if (transport === "qr") {
+    return conversation.qrSessionKey?.trim()
+      ? `qr:${conversation.qrSessionKey}`
+      : `qr:${conversation.qrSessionPhone?.trim() || conversation.qrSessionName?.trim() || "default"}`;
+  }
+
+  return "unknown";
+}
+
+export function sourceScopeLabel(conversation: Conversation) {
+  const transport = normalizeTransport(conversation.transport);
+  if (transport === "meta") {
+    return conversation.channelName?.trim() || "WhatsApp Meta principal";
+  }
+
+  if (transport === "qr") {
+    return qrSessionLabel(conversation) || "WhatsApp QR";
+  }
+
+  return "Origem nao identificada";
 }
 
 export function senderLabel(sender: string) {
@@ -178,6 +210,10 @@ export function queueSectionMeta(filter: QueueFilter) {
       return { title: "IA atendendo", description: "Conversas em automacao ativa." };
     case "HUMAN":
       return { title: "Em atendimento humano", description: "Conversas ja assumidas por um operador." };
+    case "META":
+      return { title: "WhatsApp Meta", description: "Conversas dos numeros oficiais conectados pela Cloud API." };
+    case "QR":
+      return { title: "WhatsApp QR", description: "Conversas vindas de sessoes operadas pelo WhatsApp Web experimental." };
     default:
       return { title: "Visao operacional", description: "Organize a operacao entre IA, fila humana e atendimento humano." };
   }

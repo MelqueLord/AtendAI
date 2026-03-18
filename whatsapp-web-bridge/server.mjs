@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,14 +52,29 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/sessions/:tenantId", async (req, res) => {
-  const session = getSession(req.params.tenantId);
+  const tenantId = req.params.tenantId;
+  await ensureTenantSessionsHydrated(tenantId);
+  res.json({
+    sessions: listSessions(tenantId).map((session) => serializeSession(session))
+  });
+});
+
+app.get("/sessions/:tenantId/:sessionId", async (req, res) => {
+  const tenantId = req.params.tenantId;
+  const sessionId = req.params.sessionId;
+  await ensureTenantSessionsHydrated(tenantId);
+  const session = getSession(tenantId, sessionId);
   res.json(serializeSession(session));
 });
 
 app.post("/sessions/:tenantId/start", async (req, res) => {
   try {
     const tenantId = req.params.tenantId;
-    const session = getSession(tenantId);
+    await ensureTenantSessionsHydrated(tenantId);
+    const sessionId = typeof req.body?.sessionId === "string" && req.body.sessionId.trim()
+      ? req.body.sessionId.trim()
+      : randomUUID();
+    const session = getSession(tenantId, sessionId);
     const displayName = typeof req.body?.displayName === "string" ? req.body.displayName : null;
 
     session.displayName = displayName?.trim() || session.displayName || "WhatsApp QR";
@@ -68,7 +84,7 @@ app.post("/sessions/:tenantId/start", async (req, res) => {
       session.lastUpdatedAt = new Date().toISOString();
     }
 
-    void startSessionInBackground(tenantId, {
+    void startSessionInBackground(tenantId, sessionId, {
       displayName: session.displayName,
       forceRestart: Boolean(req.body?.forceRestart)
     });
@@ -85,21 +101,23 @@ app.post("/sessions/:tenantId/start", async (req, res) => {
       success: false,
       status: "error",
       message: error instanceof Error ? error.message : "Falha ao iniciar sessao QR.",
-      session: serializeSession(getSession(req.params.tenantId))
+      session: null
     });
   }
 });
 
-app.post("/sessions/:tenantId/restart", async (req, res) => {
+app.post("/sessions/:tenantId/:sessionId/restart", async (req, res) => {
   try {
     const tenantId = req.params.tenantId;
-    const existing = getSession(tenantId);
+    const sessionId = req.params.sessionId;
+    await ensureTenantSessionsHydrated(tenantId);
+    const existing = getSession(tenantId, sessionId);
     await teardownSession(existing, false);
     existing.status = "starting";
     existing.detail = "Reiniciando sessao QR em segundo plano.";
     existing.lastUpdatedAt = new Date().toISOString();
 
-    void startSessionInBackground(tenantId, {
+    void startSessionInBackground(tenantId, sessionId, {
       displayName: existing.displayName,
       forceRestart: true
     });
@@ -116,14 +134,17 @@ app.post("/sessions/:tenantId/restart", async (req, res) => {
       success: false,
       status: "error",
       message: error instanceof Error ? error.message : "Falha ao reiniciar a sessao QR.",
-      session: serializeSession(getSession(req.params.tenantId))
+      session: null
     });
   }
 });
 
-app.post("/sessions/:tenantId/disconnect", async (req, res) => {
+app.post("/sessions/:tenantId/:sessionId/disconnect", async (req, res) => {
   try {
-    const session = getSession(req.params.tenantId);
+    const tenantId = req.params.tenantId;
+    const sessionId = req.params.sessionId;
+    await ensureTenantSessionsHydrated(tenantId);
+    const session = getSession(tenantId, sessionId);
     session.manualDisconnect = true;
     if (session.socket) {
       try {
@@ -151,21 +172,23 @@ app.post("/sessions/:tenantId/disconnect", async (req, res) => {
       success: false,
       status: "error",
       message: error instanceof Error ? error.message : "Falha ao desconectar a sessao QR.",
-      session: serializeSession(getSession(req.params.tenantId))
+      session: null
     });
   }
 });
 
-app.post("/sessions/:tenantId/sync-history", async (req, res) => {
+app.post("/sessions/:tenantId/:sessionId/sync-history", async (req, res) => {
   try {
     const tenantId = req.params.tenantId;
-    const session = getSession(tenantId);
+    const sessionId = req.params.sessionId;
+    await ensureTenantSessionsHydrated(tenantId);
+    const session = getSession(tenantId, sessionId);
     const hasChats = session.chats.size > 0;
 
     if (hasChats) {
       session.detail = "Sincronizando conversas recentes para o CRM em segundo plano.";
       session.lastUpdatedAt = new Date().toISOString();
-      void startHistorySyncInBackground(tenantId, session);
+      void startHistorySyncInBackground(tenantId, sessionId, session);
     }
 
     res.json({
@@ -182,13 +205,16 @@ app.post("/sessions/:tenantId/sync-history", async (req, res) => {
       success: false,
       status: "error",
       message: error instanceof Error ? error.message : "Falha ao sincronizar historico do WhatsApp.",
-      session: serializeSession(getSession(req.params.tenantId))
+      session: null
     });
   }
 });
 
-app.post("/sessions/:tenantId/send", async (req, res) => {
-  const session = getSession(req.params.tenantId);
+app.post("/sessions/:tenantId/:sessionId/send", async (req, res) => {
+  const tenantId = req.params.tenantId;
+  const sessionId = req.params.sessionId;
+  await ensureTenantSessionsHydrated(tenantId);
+  const session = getSession(tenantId, sessionId);
   const toPhone = typeof req.body?.toPhone === "string" ? req.body.toPhone : "";
   const message = typeof req.body?.message === "string" ? req.body.message : "";
 
@@ -256,23 +282,84 @@ app.listen(PORT, () => {
   logger.info({ port: PORT, dataDir: DATA_DIR, backendCallbackBaseUrl: BACKEND_CALLBACK_BASE_URL }, "whatsapp-web-bridge listening");
 });
 
-function getSession(tenantId) {
-  if (!sessions.has(tenantId)) {
-    sessions.set(tenantId, createEmptySession(tenantId));
-  }
-
-  return sessions.get(tenantId);
+function buildSessionMapKey(tenantId, sessionId) {
+  return `${tenantId}:${sessionId}`;
 }
 
-function startSessionInBackground(tenantId, options = {}) {
-  const session = getSession(tenantId);
+function resolveSessionAuthPath(tenantId, sessionId) {
+  return sessionId === "default"
+    ? path.join(DATA_DIR, tenantId)
+    : path.join(DATA_DIR, `${tenantId}__${sessionId}`);
+}
+
+async function ensureTenantSessionsHydrated(tenantId) {
+  const knownSessions = listSessions(tenantId);
+  if (knownSessions.length > 0) {
+    return knownSessions;
+  }
+
+  const discovered = [];
+  const defaultPath = resolveSessionAuthPath(tenantId, "default");
+
+  try {
+    const defaultStat = await fs.stat(defaultPath);
+    if (defaultStat.isDirectory()) {
+      discovered.push(getSession(tenantId, "default", defaultPath));
+    }
+  } catch {
+    // ignore missing legacy/default folder
+  }
+
+  try {
+    const entries = await fs.readdir(DATA_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const prefix = `${tenantId}__`;
+      if (!entry.name.startsWith(prefix)) {
+        continue;
+      }
+
+      const sessionId = entry.name.slice(prefix.length).trim();
+      if (!sessionId) {
+        continue;
+      }
+
+      discovered.push(getSession(tenantId, sessionId, path.join(DATA_DIR, entry.name)));
+    }
+  } catch {
+    // ignore scan failures
+  }
+
+  return discovered;
+}
+
+function listSessions(tenantId) {
+  return Array.from(sessions.values())
+    .filter((session) => session.tenantId === tenantId)
+    .sort((left, right) => (right.lastUpdatedAt || "").localeCompare(left.lastUpdatedAt || ""));
+}
+
+function getSession(tenantId, sessionId = "default", authPath = null) {
+  const key = buildSessionMapKey(tenantId, sessionId);
+  if (!sessions.has(key)) {
+    sessions.set(key, createEmptySession(tenantId, sessionId, authPath));
+  }
+
+  return sessions.get(key);
+}
+
+function startSessionInBackground(tenantId, sessionId, options = {}) {
+  const session = getSession(tenantId, sessionId);
   if (session.initPromise) {
     return session.initPromise;
   }
 
-  const initPromise = ensureSession(tenantId, options)
+  const initPromise = ensureSession(tenantId, sessionId, options)
     .catch((error) => {
-      logger.error({ err: error, tenantId }, "failed to initialize qr session");
+      logger.error({ err: error, tenantId, sessionId }, "failed to initialize qr session");
       session.status = "error";
       session.detail = error instanceof Error ? error.message : "Falha ao inicializar a sessao QR.";
       session.lastUpdatedAt = new Date().toISOString();
@@ -288,14 +375,14 @@ function startSessionInBackground(tenantId, options = {}) {
   return initPromise;
 }
 
-function startHistorySyncInBackground(tenantId, session) {
+function startHistorySyncInBackground(tenantId, sessionId, session) {
   if (session.syncPromise) {
     return session.syncPromise;
   }
 
-  const syncPromise = pushChatHistoryToBackend(tenantId, session)
+  const syncPromise = pushChatHistoryToBackend(tenantId, sessionId, session)
     .catch((error) => {
-      logger.warn({ err: error, tenantId }, "failed to sync qr history in background");
+      logger.warn({ err: error, tenantId, sessionId }, "failed to sync qr history in background");
       if (session.status === "connected") {
         session.detail = error instanceof Error
           ? `Falha ao sincronizar o historico (${error.message}).`
@@ -315,8 +402,8 @@ function startHistorySyncInBackground(tenantId, session) {
   return syncPromise;
 }
 
-async function ensureSession(tenantId, options = {}) {
-  const session = getSession(tenantId);
+async function ensureSession(tenantId, sessionId, options = {}) {
+  const session = getSession(tenantId, sessionId);
   if (session.socket && !options.forceRestart) {
     return session;
   }
@@ -331,7 +418,7 @@ async function ensureSession(tenantId, options = {}) {
   session.qrCodeDataUrl = null;
   session.lastUpdatedAt = new Date().toISOString();
 
-  const authPath = path.join(DATA_DIR, tenantId);
+  const authPath = session.authPath || resolveSessionAuthPath(tenantId, sessionId);
   await fs.mkdir(authPath, { recursive: true });
   session.authPath = authPath;
   await hydrateSessionCache(session);
@@ -341,6 +428,7 @@ async function ensureSession(tenantId, options = {}) {
   const socket = makeWASocket({
     auth: state,
     version,
+    browser: ["AtendAI", `QR ${sessionId.slice(0, 8) || "default"}`, "1.0"],
     printQRInTerminal: false,
     markOnlineOnConnect: true,
     syncFullHistory: true,
@@ -378,7 +466,7 @@ async function ensureSession(tenantId, options = {}) {
       session.pairingAttempts = 0;
       session.lastUpdatedAt = new Date().toISOString();
       scheduleCachePersist(session);
-      scheduleHistorySync(tenantId, session);
+      scheduleHistorySync(tenantId, sessionId, session);
     }
 
     if (update.connection === "close") {
@@ -400,8 +488,9 @@ async function ensureSession(tenantId, options = {}) {
       ].includes(statusCode);
       const reasonLabel = describeDisconnectReason(statusCode, update.lastDisconnect?.error);
 
-      logger.warn({
+        logger.warn({
         tenantId,
+        sessionId,
         statusCode,
         reason: reasonLabel,
         hasConnectedOnce: session.hasConnectedOnce,
@@ -428,7 +517,7 @@ async function ensureSession(tenantId, options = {}) {
           ? `Conexao perdida (${reasonLabel}). Tentando reconectar automaticamente.`
           : `Pareamento interrompido (${reasonLabel}). Gerando um novo QR automaticamente.`;
         session.lastUpdatedAt = new Date().toISOString();
-        scheduleSessionRestart(tenantId, session);
+        scheduleSessionRestart(tenantId, sessionId, session);
       }
     }
   });
@@ -453,7 +542,7 @@ async function ensureSession(tenantId, options = {}) {
 
   socket.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
     mergeHistorySnapshot(session, chats, contacts, messages);
-    scheduleHistorySync(tenantId, session);
+    scheduleHistorySync(tenantId, sessionId, session);
   });
 
   socket.ev.on("messages.upsert", async ({ messages }) => {
@@ -485,7 +574,7 @@ async function ensureSession(tenantId, options = {}) {
       }
 
       const customerName = resolveCustomerName(customerPhone, message.pushName);
-      logger.info({ tenantId, remoteJid, customerPhone }, "forwarding qr inbound message to backend");
+      logger.info({ tenantId, sessionId, remoteJid, customerPhone }, "forwarding qr inbound message to backend");
       await notifyBackendIncomingMessage(tenantId, {
         customerPhone,
         customerName,
@@ -532,11 +621,11 @@ async function teardownSession(session, removeFiles) {
   }
 }
 
-function createEmptySession(tenantId) {
+function createEmptySession(tenantId, sessionId = "default", authPath = null) {
   return {
     tenantId,
-    sessionId: tenantId,
-    displayName: "WhatsApp QR",
+    sessionId,
+    displayName: sessionId === "default" ? "WhatsApp QR" : `WhatsApp QR ${sessionId.slice(0, 4)}`,
     status: "idle",
     detail: "Sessao QR ainda nao iniciada.",
     qrCodeDataUrl: null,
@@ -557,7 +646,7 @@ function createEmptySession(tenantId) {
     initPromise: null,
     syncPromise: null,
     socket: null,
-    authPath: path.join(DATA_DIR, tenantId)
+    authPath: authPath || resolveSessionAuthPath(tenantId, sessionId)
   };
 }
 
@@ -580,14 +669,14 @@ function serializeSession(session) {
   };
 }
 
-function scheduleHistorySync(tenantId, session, delayMs = 1500) {
+function scheduleHistorySync(tenantId, sessionId, session, delayMs = 1500) {
   if (session.historySyncTimer) {
     clearTimeout(session.historySyncTimer);
   }
 
   session.historySyncTimer = setTimeout(() => {
     session.historySyncTimer = null;
-    void startHistorySyncInBackground(tenantId, session);
+    void startHistorySyncInBackground(tenantId, sessionId, session);
   }, delayMs);
 }
 
@@ -609,14 +698,14 @@ function clearSessionHistory(session) {
   scheduleCachePersist(session);
 }
 
-function scheduleSessionRestart(tenantId, session, delayMs = 2500) {
+function scheduleSessionRestart(tenantId, sessionId, session, delayMs = 2500) {
   if (session.restartTimer) {
     clearTimeout(session.restartTimer);
   }
 
   session.restartTimer = setTimeout(() => {
     session.restartTimer = null;
-    void startSessionInBackground(tenantId, {
+    void startSessionInBackground(tenantId, sessionId, {
       displayName: session.displayName,
       forceRestart: false
     });
@@ -706,7 +795,7 @@ function createChatPreview(customerPhone) {
   };
 }
 
-async function pushChatHistoryToBackend(tenantId, session) {
+async function pushChatHistoryToBackend(tenantId, sessionId, session) {
   if (!BACKEND_CALLBACK_BASE_URL) {
     return 0;
   }
@@ -744,7 +833,7 @@ async function pushChatHistoryToBackend(tenantId, session) {
 
     if (!response.ok) {
       const body = await response.text();
-      logger.warn({ tenantId, status: response.status, body }, "backend callback for qr history sync failed");
+      logger.warn({ tenantId, sessionId, status: response.status, body }, "backend callback for qr history sync failed");
       return 0;
     }
 
@@ -760,7 +849,7 @@ async function pushChatHistoryToBackend(tenantId, session) {
     session.lastUpdatedAt = new Date().toISOString();
     return imported;
   } catch (error) {
-    logger.warn({ err: error, tenantId }, "failed to sync qr history with backend");
+    logger.warn({ err: error, tenantId, sessionId }, "failed to sync qr history with backend");
     return 0;
   }
 }

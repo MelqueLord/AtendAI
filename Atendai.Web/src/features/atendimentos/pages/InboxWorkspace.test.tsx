@@ -42,6 +42,16 @@ function renderInbox() {
       setSearch={vi.fn()}
       queueFilter="ALL"
       setQueueFilter={vi.fn()}
+      sourceFilter="ALL"
+      setSourceFilter={vi.fn()}
+      sourceScopes={[
+        {
+          value: "meta:channel-1",
+          label: "Principal",
+          count: 1,
+          transport: "meta"
+        }
+      ]}
       reply=""
       setReply={vi.fn()}
       outboundDraft={{ customerName: "", customerPhone: "", channelId: "", message: "" }}

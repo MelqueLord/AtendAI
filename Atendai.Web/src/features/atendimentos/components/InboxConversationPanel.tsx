@@ -1,6 +1,6 @@
 import { EmptyStatePanel, StatusPill, WorkspaceSection, labelClass, primaryButtonClass, secondaryButtonClass, textareaClass } from "@shared/components/WorkspaceUi";
 import type { Dispatch, SetStateAction } from "react";
-import { bubbleClasses, operationSummary, qrSessionLabel, senderLabel, statusTone, transportTone, transitionActionSummary } from "@features/atendimentos/utils/inboxWorkspace";
+import { bubbleClasses, operationSummary, qrSessionLabel, senderLabel, sourceScopeLabel, statusTone, transportTone, transitionActionSummary } from "@features/atendimentos/utils/inboxWorkspace";
 import { normalizeConversationStatus } from "@shared/utils/conversation";
 import type { Conversation, QuickReplyTemplate } from "@shared/types";
 
@@ -38,6 +38,7 @@ export function InboxConversationPanel({
   const selectedNormalizedStatus = selectedConversation ? normalizeConversationStatus(selectedConversation.status) : null;
   const selectedTransitions = selectedConversation ? transitionActionSummary(selectedConversation.status) : [];
   const selectedQrOrigin = selectedConversation ? qrSessionLabel(selectedConversation) : null;
+  const selectedSourceScope = selectedConversation ? sourceScopeLabel(selectedConversation) : null;
 
   return (
     <WorkspaceSection
@@ -63,6 +64,26 @@ export function InboxConversationPanel({
               <div className="space-y-2">
                 <h3 className="text-lg font-semibold tracking-tight text-slate-950">{selectedOperation?.title}</h3>
                 <p className="text-sm leading-6 text-slate-600">{selectedOperation?.description}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className={`rounded-2xl border px-4 py-3 ${selectedConversation.transport?.toLowerCase() === "meta" ? "border-blue-200 bg-blue-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Origem operacional</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">
+                    {selectedConversation.transport?.toLowerCase() === "meta" ? "Canal oficial via Meta" : "Canal via WhatsApp Web QR"}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{selectedSourceScope}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Regra da conversa</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">
+                    {selectedConversation.transport?.toLowerCase() === "meta"
+                      ? "Pode coexistir com outros numeros oficiais do tenant."
+                      : "Pode coexistir com outras sessoes QR do tenant."}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    A conversa fica vinculada a esta origem para evitar mistura entre numeros diferentes.
+                  </p>
+                </div>
               </div>
               <div className="space-y-3">
                 <div className="space-y-1">

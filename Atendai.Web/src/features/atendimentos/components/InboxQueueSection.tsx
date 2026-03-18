@@ -13,11 +13,14 @@ import type { Conversation, QueueFilter } from "@shared/types";
 import {
   conversationAttentionSnapshot,
   lastMessagePreview,
+  normalizeTransport,
   operationSummary,
   queueFilters,
   qrSessionLabel,
   queueRowHeight,
   queueSectionMeta,
+  sourceScopeKey,
+  sourceScopeLabel,
   statusLabel,
   statusTone,
   transportLabel,
@@ -39,6 +42,9 @@ type QueueSectionProps = {
   setSearch: Dispatch<SetStateAction<string>>;
   queueFilter: QueueFilter;
   setQueueFilter: Dispatch<SetStateAction<QueueFilter>>;
+  sourceFilter: string;
+  setSourceFilter: Dispatch<SetStateAction<string>>;
+  sourceOptions: Array<{ value: string; label: string; count: number }>;
   queueLoading: boolean;
   queueRefreshing: boolean;
   assignmentPendingConversationId: string | null;
@@ -65,6 +71,9 @@ export function InboxQueueSection({
   setSearch,
   queueFilter,
   setQueueFilter,
+  sourceFilter,
+  setSourceFilter,
+  sourceOptions,
   queueLoading,
   queueRefreshing,
   assignmentPendingConversationId,
@@ -81,6 +90,46 @@ export function InboxQueueSection({
   visibleQueueStart
 }: QueueSectionProps) {
   const queueSection = useMemo(() => queueSectionMeta(queueFilter), [queueFilter]);
+  const groupedQueue = useMemo(() => {
+    const sections = [
+      { key: "meta", title: "Canais oficiais via Meta", description: "Conversas dos numeros oficiais conectados pela Cloud API.", groups: [] as Array<{ key: string; label: string; items: Array<{ conversation: Conversation; snapshot: ReturnType<typeof conversationAttentionSnapshot> }> }> },
+      { key: "qr", title: "Sessoes via WhatsApp Web QR", description: "Conversas trazidas por sessoes experimentais do WhatsApp Web.", groups: [] as Array<{ key: string; label: string; items: Array<{ conversation: Conversation; snapshot: ReturnType<typeof conversationAttentionSnapshot> }> }> }
+    ];
+
+    const sectionMap = new Map(sections.map((section) => [section.key, section]));
+
+    for (const item of prioritizedQueue) {
+      const transport = normalizeTransport(item.conversation.transport);
+      const sectionKey = transport === "meta" ? "meta" : transport === "qr" ? "qr" : null;
+      if (!sectionKey) {
+        continue;
+      }
+
+      const section = sectionMap.get(sectionKey);
+      if (!section) {
+        continue;
+      }
+
+      const groupKey = sourceScopeKey(item.conversation);
+      const groupLabel = sourceScopeLabel(item.conversation);
+      const existingGroup = section.groups.find((group) => group.key === groupKey);
+      if (existingGroup) {
+        existingGroup.items.push(item);
+      } else {
+        section.groups.push({
+          key: groupKey,
+          label: groupLabel,
+          items: [item]
+        });
+      }
+    }
+
+    for (const section of sections) {
+      section.groups.sort((left, right) => left.label.localeCompare(right.label));
+    }
+
+    return sections;
+  }, [prioritizedQueue]);
 
   function renderConversationCard(conversation: Conversation) {
     const isActive = selectedConversationId === conversation.id;
@@ -121,7 +170,7 @@ export function InboxQueueSection({
           <StatusPill tone={attention.tone}>{attention.label}</StatusPill>
           {transportBadge && <StatusPill tone={transportTone(conversation.transport)}>{transportBadge}</StatusPill>}
           {qrOriginLabel && <StatusPill tone="amber">Sessao: {qrOriginLabel}</StatusPill>}
-          {conversation.channelName && <StatusPill tone="slate">{conversation.channelName}</StatusPill>}
+          {!qrOriginLabel && conversation.channelName && <StatusPill tone="slate">{sourceScopeLabel(conversation)}</StatusPill>}
           {conversation.assignedUserName && <StatusPill tone="blue">{conversation.assignedUserName}</StatusPill>}
         </div>
         <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Proxima acao</p>
@@ -146,6 +195,21 @@ export function InboxQueueSection({
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Nome, telefone ou ultima mensagem"
               />
+            </label>
+            <label className={labelClass} htmlFor="queue-source-filter">
+              Origem do canal
+              <select
+                id="queue-source-filter"
+                className={inputClass}
+                value={sourceFilter}
+                onChange={(event) => setSourceFilter(event.target.value)}
+              >
+                {sourceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               {queueFilters.map((filter) => (
@@ -200,6 +264,11 @@ export function InboxQueueSection({
             <div>
               <p className="text-sm font-semibold text-slate-950">{queueSection.title}</p>
               <p className="mt-1 text-xs leading-5 text-slate-500">{queueSection.description}</p>
+              {sourceFilter !== "ALL" && (
+                <p className="mt-2 text-xs font-medium text-slate-500">
+                  Escopo atual: {sourceOptions.find((option) => option.value === sourceFilter)?.label ?? "Origem selecionada"}
+                </p>
+              )}
             </div>
             <StatusPill tone="slate">{queue.length}</StatusPill>
           </div>
@@ -214,6 +283,45 @@ export function InboxQueueSection({
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div key={`queue-skeleton-${index}`} className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white/80" />
                 ))}
+              </div>
+            ) : sourceFilter === "ALL" ? (
+              <div className="space-y-5">
+                {groupedQueue.some((section) => section.groups.length > 0) ? groupedQueue.map((section) => (
+                  <section key={section.key} className="space-y-3">
+                    <div className={`rounded-2xl border px-4 py-3 ${section.key === "meta" ? "border-blue-200 bg-blue-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className={`text-sm font-semibold ${section.key === "meta" ? "text-blue-950" : "text-amber-950"}`}>{section.title}</p>
+                          <p className={`mt-1 text-xs leading-5 ${section.key === "meta" ? "text-blue-800" : "text-amber-800"}`}>{section.description}</p>
+                        </div>
+                        <StatusPill tone={section.key === "meta" ? "blue" : "amber"}>
+                          {section.groups.reduce((total, group) => total + group.items.length, 0)}
+                        </StatusPill>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {section.groups.length > 0 ? section.groups.map((group) => (
+                        <div key={group.key} className="space-y-3">
+                          <div className="flex items-center justify-between gap-3 px-1">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{group.label}</p>
+                              <p className="text-xs text-slate-500">{group.items.length} conversa(s) nesta origem.</p>
+                            </div>
+                            <StatusPill tone="slate">{group.items.length}</StatusPill>
+                          </div>
+                          <div className="grid gap-3">
+                            {group.items.map((item) => renderConversationCard(item.conversation))}
+                          </div>
+                        </div>
+                      )) : (
+                        <EmptyStatePanel>Nenhuma conversa nesta categoria.</EmptyStatePanel>
+                      )}
+                    </div>
+                  </section>
+                )) : (
+                  <EmptyStatePanel>Nenhuma conversa encontrada para o filtro atual.</EmptyStatePanel>
+                )}
               </div>
             ) : prioritizedQueue.length > 0 ? (
               shouldVirtualizeQueue ? (

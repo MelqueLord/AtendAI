@@ -106,7 +106,7 @@ export type AnalyticsOverview = {
   last7Days: AnalyticsPoint[];
 };
 
-export type QueueFilter = "ALL" | "WAITING_HUMAN" | "BOT" | "HUMAN";
+export type QueueFilter = "ALL" | "WAITING_HUMAN" | "BOT" | "HUMAN" | "META" | "QR";
 export type AppPage = "ATTENDANCE" | "AI" | "CRM" | "WHATSAPP" | "COMMERCIAL" | "USERS" | "COMPANIES";
 
 export type BillingPlan = {
@@ -285,6 +285,7 @@ export type WhatsAppWebSessionState = {
 export type StartWhatsAppWebSessionPayload = {
   displayName: string | null;
   forceRestart: boolean;
+  sessionId?: string | null;
 };
 
 export type WhatsAppWebSessionAction = {
@@ -292,6 +293,10 @@ export type WhatsAppWebSessionAction = {
   status: string;
   message: string;
   session: WhatsAppWebSessionState | null;
+};
+
+export type WhatsAppWebSessionsPayload = {
+  sessions: WhatsAppWebSessionState[];
 };
 
 export type Contact = {

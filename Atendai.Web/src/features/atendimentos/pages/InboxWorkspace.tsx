@@ -36,6 +36,9 @@ export function InboxWorkspace({
   setSearch,
   queueFilter,
   setQueueFilter,
+  sourceFilter,
+  setSourceFilter,
+  sourceScopes,
   reply,
   setReply,
   outboundDraft,
@@ -98,8 +101,19 @@ export function InboxWorkspace({
   const waitingCount = conversations.filter((conversation) => normalizeConversationStatus(conversation.status) === "WaitingHuman").length;
   const humanCount = conversations.filter((conversation) => normalizeConversationStatus(conversation.status) === "HumanHandling").length;
   const closedCount = conversations.filter((conversation) => normalizeConversationStatus(conversation.status) === "Closed").length;
+  const metaCount = conversations.filter((conversation) => conversation.transport?.toLowerCase() === "meta").length;
+  const qrCount = conversations.filter((conversation) => conversation.transport?.toLowerCase() === "qr").length;
   const activeChannels = useMemo(() => whatsAppChannels.filter((channel) => channel.isActive), [whatsAppChannels]);
   const selectedTransportBadge = selectedConversation ? transportLabel(selectedConversation.transport) : null;
+  const sourceOptions = useMemo(
+    () => [
+      { value: "ALL", label: "Todos os canais", count: conversations.length },
+      ...sourceScopes.map((scope) => ({ value: scope.value, label: scope.label, count: scope.count }))
+    ],
+    [conversations.length, sourceScopes]
+  );
+  const metaScopes = useMemo(() => sourceScopes.filter((scope) => scope.transport === "meta"), [sourceScopes]);
+  const qrScopes = useMemo(() => sourceScopes.filter((scope) => scope.transport === "qr"), [sourceScopes]);
   const realtimeTone =
     attendanceRealtimeState === "connected" ? "emerald"
       : attendanceRealtimeState === "reconnecting" || attendanceRealtimeState === "connecting" ? "amber"
@@ -256,10 +270,54 @@ export function InboxWorkspace({
           <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
             <MetricTile label="IA atendendo" value={String(botCount)} detail="Conversas em automacao ativa" tone="emerald" />
             <MetricTile label="Fila humana" value={String(waitingCount)} detail="Clientes aguardando operador" tone="amber" />
+            <MetricTile label="WhatsApp Meta" value={String(metaCount)} detail={`${activeChannels.length} numero(s) oficial(is) ativo(s)`} tone="blue" />
+            <MetricTile label="WhatsApp QR" value={String(qrCount)} detail="Sessoes experimentais com historico no inbox" tone="amber" />
             <MetricTile label="Humano ativo" value={String(humanCount)} detail="Conversas assumidas por operador" tone="blue" />
             <MetricTile label="Encerradas" value={String(closedCount)} detail="Historico finalizado" tone="slate" />
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <WorkspaceSection eyebrow="Canais oficiais" title="WhatsApp Meta">
+          <div className="space-y-3">
+            <p className="text-sm leading-6 text-slate-600">
+              Numeros conectados pela Cloud API da Meta. Cada numero oficial pode aparecer no atendimento com sua propria fila de conversas.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {metaScopes.length > 0 ? metaScopes.map((scope) => (
+                <div key={scope.value} className="rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-blue-950">{scope.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-blue-800">{scope.count} conversa(s) vinculada(s) a este numero/canal.</p>
+                </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-4 text-sm text-slate-500 sm:col-span-2">
+                  Nenhum numero oficial da Meta com conversas nesta fila.
+                </div>
+              )}
+            </div>
+          </div>
+        </WorkspaceSection>
+
+        <WorkspaceSection eyebrow="Sessoes experimentais" title="WhatsApp QR">
+          <div className="space-y-3">
+            <p className="text-sm leading-6 text-slate-600">
+              Numeros conectados por QR no WhatsApp Web. Cada sessao QR pode ter um historico proprio e aparece separada no atendimento.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {qrScopes.length > 0 ? qrScopes.map((scope) => (
+                <div key={scope.value} className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-amber-950">{scope.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-800">{scope.count} conversa(s) vinculada(s) a esta sessao.</p>
+                </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-4 text-sm text-slate-500 sm:col-span-2">
+                  Nenhuma sessao QR com conversas nesta fila.
+                </div>
+              )}
+            </div>
+          </div>
+        </WorkspaceSection>
       </section>
 
       <InboxQueueSection
@@ -272,6 +330,9 @@ export function InboxWorkspace({
         setSearch={setSearch}
         queueFilter={queueFilter}
         setQueueFilter={setQueueFilter}
+        sourceFilter={sourceFilter}
+        setSourceFilter={setSourceFilter}
+        sourceOptions={sourceOptions}
         queueLoading={queueLoading}
         queueRefreshing={queueRefreshing}
         assignmentPendingConversationId={assignmentPendingConversationId}

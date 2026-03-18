@@ -7,9 +7,11 @@ import type {
   QueueFilter,
   QuickReplyTemplate
 } from "@shared/types";
+import type { AttendanceSourceScope } from "@features/atendimentos/types/inboxWorkspace";
 import { normalizeConversationStatus } from "@shared/utils/conversation";
 import { resolveCustomerDisplayName } from "@shared/utils/customer";
 import { normalizePhone } from "@shared/utils/phone";
+import { normalizeTransport, sourceScopeKey, sourceScopeLabel } from "@features/atendimentos/utils/inboxWorkspace";
 
 const emptyOutboundDraft = { customerName: "", customerPhone: "", channelId: "", message: "" };
 const emptyFeedbackDraft = { rating: 5, comment: "" };
@@ -41,6 +43,7 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
   const [attendanceQuickReplySaving, setAttendanceQuickReplySaving] = useState(false);
   const [search, setSearch] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("ALL");
+  const [sourceFilter, setSourceFilter] = useState("ALL");
   const [attendanceRealtimeState, setAttendanceRealtimeState] = useState<AttendanceRealtimeState>("disconnected");
   const [attendanceRealtimeLastPublishedAt, setAttendanceRealtimeLastPublishedAt] = useState<string | null>(null);
   const [attendanceRealtimeLastReceivedAt, setAttendanceRealtimeLastReceivedAt] = useState<string | null>(null);
@@ -99,18 +102,52 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
     return contacts.find((contact) => normalizePhone(contact.phone) === normalizePhone(selectedConversation.customerPhone)) ?? null;
   }, [contacts, selectedConversation]);
 
+  const sourceScopes = useMemo<AttendanceSourceScope[]>(() => {
+    const counters = new Map<string, AttendanceSourceScope>();
+
+    for (const conversation of conversationsWithResolvedNames) {
+      const transport = normalizeTransport(conversation.transport);
+      if (transport !== "meta" && transport !== "qr") {
+        continue;
+      }
+
+      const key = sourceScopeKey(conversation);
+      const current = counters.get(key);
+      if (current) {
+        current.count += 1;
+        continue;
+      }
+
+      counters.set(key, {
+        value: key,
+        label: sourceScopeLabel(conversation),
+        count: 1,
+        transport
+      });
+    }
+
+    return Array.from(counters.values()).sort((left, right) => left.label.localeCompare(right.label));
+  }, [conversationsWithResolvedNames]);
+
   const queue = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
 
     return conversationsWithResolvedNames.filter((conversation) => {
       const status = normalizeConversationStatus(conversation.status);
+      const transport = normalizeTransport(conversation.transport);
       const filterMatch =
         queueFilter === "ALL" ||
         (queueFilter === "WAITING_HUMAN" && status === "WaitingHuman") ||
         (queueFilter === "BOT" && status === "BotHandling") ||
-        (queueFilter === "HUMAN" && status === "HumanHandling");
+        (queueFilter === "HUMAN" && status === "HumanHandling") ||
+        (queueFilter === "META" && transport === "meta") ||
+        (queueFilter === "QR" && transport === "qr");
 
-      if (!filterMatch) {
+      const sourceMatch =
+        sourceFilter === "ALL" ||
+        sourceScopeKey(conversation) === sourceFilter;
+
+      if (!filterMatch || !sourceMatch) {
         return false;
       }
 
@@ -125,7 +162,7 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
         lastMessage.toLowerCase().includes(query)
       );
     });
-  }, [conversationsWithResolvedNames, deferredSearch, queueFilter]);
+  }, [conversationsWithResolvedNames, deferredSearch, queueFilter, sourceFilter]);
 
   function resetAttendanceUiState() {
     conversationsAbortRef.current?.abort();
@@ -145,6 +182,7 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
     setReply("");
     setSearch("");
     setQueueFilter("ALL");
+    setSourceFilter("ALL");
     setAttendanceQueueLoading(false);
     setAttendanceQueueRefreshing(false);
     setAttendanceConversationLoading(false);
@@ -209,6 +247,8 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
     setSearch,
     queueFilter,
     setQueueFilter,
+    sourceFilter,
+    setSourceFilter,
     attendanceRealtimeState,
     setAttendanceRealtimeState,
     attendanceRealtimeLastPublishedAt,
@@ -230,6 +270,7 @@ export function useAttendanceWorkspaceState(contacts: Contact[]) {
     conversationsWithResolvedNames,
     selectedConversation,
     selectedContact,
+    sourceScopes,
     queue,
     resetAttendanceUiState
   };

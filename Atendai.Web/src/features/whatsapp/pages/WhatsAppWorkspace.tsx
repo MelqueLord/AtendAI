@@ -3,6 +3,7 @@ import type {
   MetaEmbeddedSignupConfig,
   MetaWhatsAppBootstrapResult,
   MetaWhatsAppSetup,
+  WhatsAppWebSessionsPayload,
   WhatsAppWebSessionState
 } from "@shared/types";
 import {
@@ -21,7 +22,7 @@ import {
 } from "../services/whatsappLaunchService";
 import { bootstrapMetaChannel, copyText, deleteMetaChannel, fetchMetaSetup, testMetaConnection, updateMetaChannel, type MetaBootstrapDraft } from "../services/metaSetupService";
 import { fetchEmbeddedSignupConfig, launchEmbeddedSignup } from "../services/embeddedSignupService";
-import { disconnectWhatsAppWebSession, fetchWhatsAppWebSessionState, restartWhatsAppWebSession, startWhatsAppWebSession, syncWhatsAppWebSessionHistory } from "../services/whatsappWebBridgeService";
+import { disconnectWhatsAppWebSession, fetchWhatsAppWebSessions, restartWhatsAppWebSession, startWhatsAppWebSession, syncWhatsAppWebSessionHistory } from "../services/whatsappWebBridgeService";
 import { ConfiguredChannelsSection } from "../components/ConfiguredChannelsSection";
 import { MetaChannelSetupSection } from "../components/MetaChannelSetupSection";
 import { WhatsAppAccessOptionsPanel } from "../components/WhatsAppAccessOptionsPanel";
@@ -73,7 +74,8 @@ export function WhatsAppWorkspace({
   const [busyChannelId, setBusyChannelId] = useState("");
   const [setupFeedback, setSetupFeedback] = useState("");
   const [metaMessage, setMetaMessage] = useState("");
-  const [qrSession, setQrSession] = useState<WhatsAppWebSessionState | null>(null);
+  const [qrSessions, setQrSessions] = useState<WhatsAppWebSessionState[]>([]);
+  const [selectedQrSessionId, setSelectedQrSessionId] = useState("");
   const [qrLoading, setQrLoading] = useState(true);
   const [qrBusy, setQrBusy] = useState(false);
   const [qrMessage, setQrMessage] = useState("");
@@ -83,6 +85,21 @@ export function WhatsAppWorkspace({
   const [webLaunchState, setWebLaunchState] = useState<WebLaunchState>("idle");
   const externalWindowRef = useRef<Window | null>(null);
   const frameLoadedRef = useRef(false);
+  const qrSession = useMemo(
+    () => qrSessions.find((session) => session.sessionId === selectedQrSessionId) ?? qrSessions[0] ?? null,
+    [qrSessions, selectedQrSessionId]
+  );
+
+  function mergeQrSession(nextSession: WhatsAppWebSessionState | null) {
+    if (!nextSession) {
+      return;
+    }
+
+    setQrSessions((current) => {
+      const next = current.filter((session) => session.sessionId !== nextSession.sessionId);
+      return [nextSession, ...next];
+    });
+  }
 
   const loadSetupState = useCallback(async () => {
     setSetupLoading(true);
@@ -130,12 +147,12 @@ export function WhatsAppWorkspace({
     setQrLoading(true);
 
     try {
-      const data = await fetchWhatsAppWebSessionState(authToken);
-      setQrSession(data);
+      const data: WhatsAppWebSessionsPayload = await fetchWhatsAppWebSessions(authToken);
+      setQrSessions(data.sessions ?? []);
       setQrMessage("");
     } catch (error) {
       const message = resolveApiErrorMessage(error, "Nao foi possivel carregar a sessao QR.");
-      setQrSession({
+      setQrSessions([{
         isConfigured: false,
         status: "error",
         detail: message,
@@ -150,11 +167,24 @@ export function WhatsAppWorkspace({
         canDisconnect: false,
         cachedChatsCount: 0,
         lastHistorySyncAt: null
-      });
+      }]);
     } finally {
       setQrLoading(false);
     }
   }, [authToken]);
+
+  useEffect(() => {
+    if (qrSessions.length === 0) {
+      if (selectedQrSessionId) {
+        setSelectedQrSessionId("");
+      }
+      return;
+    }
+
+    if (!selectedQrSessionId || !qrSessions.some((session) => session.sessionId === selectedQrSessionId)) {
+      setSelectedQrSessionId(qrSessions[0]?.sessionId ?? "");
+    }
+  }, [qrSessions, selectedQrSessionId]);
 
   useEffect(() => {
     void loadSetupState();
@@ -380,15 +410,18 @@ export function WhatsAppWorkspace({
     setQrMessage("");
 
     try {
-      const result = forceRestart
-        ? await restartWhatsAppWebSession(authToken)
+      const targetSessionId = qrSession?.sessionId ?? null;
+      const result = forceRestart && targetSessionId
+        ? await restartWhatsAppWebSession(authToken, targetSessionId)
         : await startWhatsAppWebSession(authToken, {
             displayName: qrDisplayName.trim() || null,
-            forceRestart: false
+            forceRestart: false,
+            sessionId: targetSessionId
           });
 
       if (result.session) {
-        setQrSession(result.session);
+        mergeQrSession(result.session);
+        setSelectedQrSessionId(result.session.sessionId ?? "");
       } else {
         await loadQrSessionState();
       }
@@ -413,9 +446,16 @@ export function WhatsAppWorkspace({
     setQrMessage("");
 
     try {
-      const result = await disconnectWhatsAppWebSession(authToken);
+      if (!qrSession?.sessionId) {
+        const message = "Selecione uma sessao QR para desconectar.";
+        setQrMessage(message);
+        onSurfaceError(message);
+        return;
+      }
+
+      const result = await disconnectWhatsAppWebSession(authToken, qrSession.sessionId);
       if (result.session) {
-        setQrSession(result.session);
+        mergeQrSession(result.session);
       } else {
         await loadQrSessionState();
       }
@@ -435,14 +475,51 @@ export function WhatsAppWorkspace({
     }
   }
 
+  async function handleCreateQrSession() {
+    setQrBusy(true);
+    setQrMessage("");
+
+    try {
+      const startResult = await startWhatsAppWebSession(authToken, {
+        displayName: qrDisplayName.trim() || null,
+        forceRestart: false,
+        sessionId: null
+      });
+
+      if (startResult.session) {
+        mergeQrSession(startResult.session);
+        setSelectedQrSessionId(startResult.session.sessionId ?? "");
+      } else {
+        await loadQrSessionState();
+      }
+
+      const message = "Nova sessao QR criada. Escaneie o QR para conectar outro numero.";
+      setQrMessage(message);
+      onSurfaceNotice(message);
+    } catch (error) {
+      const message = resolveApiErrorMessage(error, "Nao foi possivel criar uma nova sessao QR.");
+      setQrMessage(message);
+      onSurfaceError(message);
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
   async function handleSyncQrHistory() {
     setQrBusy(true);
     setQrMessage("");
 
     try {
-      const result = await syncWhatsAppWebSessionHistory(authToken);
+      if (!qrSession?.sessionId) {
+        const message = "Selecione uma sessao QR para sincronizar.";
+        setQrMessage(message);
+        onSurfaceError(message);
+        return;
+      }
+
+      const result = await syncWhatsAppWebSessionHistory(authToken, qrSession.sessionId);
       if (result.session) {
-        setQrSession(result.session);
+        mergeQrSession(result.session);
       } else {
         await loadQrSessionState();
       }
@@ -716,6 +793,8 @@ export function WhatsAppWorkspace({
           metaDetail={metaDetail}
           metaFootnote={metaFootnote}
           metaMessage={metaMessage}
+          qrSessions={qrSessions}
+          selectedQrSessionId={selectedQrSessionId}
           qrSession={qrSession}
           qrBusy={qrBusy}
           qrStatusLabel={qrStatusLabel}
@@ -735,6 +814,8 @@ export function WhatsAppWorkspace({
           onLaunchEmbeddedSignup={handleLaunchEmbeddedSignup}
           onTestMetaConnection={handleTestMetaConnection}
           onSurfaceQrConfigurationError={() => onSurfaceError(qrSession?.detail ?? "Configure WhatsAppWebBridge:BaseUrl para usar a bridge QR.")}
+          onCreateQrSession={handleCreateQrSession}
+          onSelectQrSession={setSelectedQrSessionId}
           onSyncQrHistory={handleSyncQrHistory}
           onStartQrSession={handleStartQrSession}
           onDisconnectQrSession={handleDisconnectQrSession}

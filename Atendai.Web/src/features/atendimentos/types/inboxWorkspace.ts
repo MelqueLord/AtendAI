@@ -37,6 +37,13 @@ export type OutboundDraft = {
   message: string;
 };
 
+export type AttendanceSourceScope = {
+  value: string;
+  label: string;
+  count: number;
+  transport: "meta" | "qr";
+};
+
 export type InboxWorkspaceProps = {
   queue: Conversation[];
   conversations: Conversation[];
@@ -47,6 +54,9 @@ export type InboxWorkspaceProps = {
   setSearch: Dispatch<SetStateAction<string>>;
   queueFilter: QueueFilter;
   setQueueFilter: Dispatch<SetStateAction<QueueFilter>>;
+  sourceFilter: string;
+  setSourceFilter: Dispatch<SetStateAction<string>>;
+  sourceScopes: AttendanceSourceScope[];
   reply: string;
   setReply: Dispatch<SetStateAction<string>>;
   outboundDraft: OutboundDraft;

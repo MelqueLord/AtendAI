@@ -163,7 +163,13 @@ public sealed class TenantWhatsAppService(
 
         if (string.Equals(targetTransport, "qr", StringComparison.OrdinalIgnoreCase))
         {
-            var qrSend = await SendViaQrSessionAsync(tenantId, normalizedToPhone, message, cancellationToken);
+            string? qrSessionId = null;
+            if (conversationId.HasValue)
+            {
+                qrSessionId = (await conversationRepository.GetConversationByIdAsync(tenantId, conversationId.Value, cancellationToken))?.QrSessionKey;
+            }
+
+            var qrSend = await SendViaQrSessionAsync(tenantId, qrSessionId, normalizedToPhone, message, cancellationToken);
             await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, qrSend, message, cancellationToken);
             return qrSend;
         }
@@ -188,7 +194,7 @@ public sealed class TenantWhatsAppService(
             return send;
         }
 
-        var qrFallback = await SendViaQrSessionAsync(tenantId, normalizedToPhone, message, cancellationToken);
+        var qrFallback = await SendViaQrSessionAsync(tenantId, null, normalizedToPhone, message, cancellationToken);
         if (qrFallback.Success || !string.Equals(qrFallback.Status, "not_configured_qr", StringComparison.OrdinalIgnoreCase))
         {
             await LogSendResultAsync(tenantId, conversationId, normalizedToPhone, qrFallback, message, cancellationToken);
@@ -454,10 +460,27 @@ public sealed class TenantWhatsAppService(
             cancellationToken);
     }
 
-    private async Task<WhatsAppSendResult> SendViaQrSessionAsync(Guid tenantId, string toPhone, string message, CancellationToken cancellationToken)
+    private async Task<WhatsAppSendResult> SendViaQrSessionAsync(Guid tenantId, string? sessionId, string toPhone, string message, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            var sessions = await whatsAppWebSessionService.GetSessionsAsync(tenantId, cancellationToken);
+            sessionId = sessions.Sessions.FirstOrDefault(current => string.Equals(current.Status, "connected", StringComparison.OrdinalIgnoreCase))?.SessionId;
+        }
+
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return new WhatsAppSendResult
+            {
+                Success = false,
+                Status = "not_configured_qr",
+                Error = "Nenhuma sessao QR conectada foi encontrada para este tenant."
+            };
+        }
+
         var qrSend = await whatsAppWebSessionService.SendMessageAsync(
             tenantId,
+            sessionId,
             new SendWhatsAppWebSessionMessageRequest(toPhone, message),
             cancellationToken);
 

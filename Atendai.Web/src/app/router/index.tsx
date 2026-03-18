@@ -140,6 +140,8 @@ export function AppRouter() {
     setSearch,
     queueFilter,
     setQueueFilter,
+    sourceFilter,
+    setSourceFilter,
     attendanceRealtimeState,
     setAttendanceRealtimeState,
     attendanceRealtimeLastPublishedAt,
@@ -161,6 +163,7 @@ export function AppRouter() {
     conversationsWithResolvedNames,
     selectedConversation,
     selectedContact,
+    sourceScopes,
     queue,
     resetAttendanceUiState
   } = attendanceWorkspace;
@@ -609,6 +612,9 @@ export function AppRouter() {
           setSearch,
           queueFilter,
           setQueueFilter,
+          sourceFilter,
+          setSourceFilter,
+          sourceScopes,
           reply,
           setReply,
           outboundDraft,

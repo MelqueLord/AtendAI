@@ -1,6 +1,6 @@
 # WhatsApp Web Bridge
 
-Bridge experimental para sessao QR dentro do CRM.
+Bridge experimental para operar uma ou mais sessoes QR do WhatsApp Web dentro do CRM.
 
 ## Subir localmente
 
@@ -23,11 +23,13 @@ node server.mjs
 
 - `GET /health`
 - `GET /sessions/:tenantId`
+- `GET /sessions/:tenantId/:sessionId`
 - `POST /sessions/:tenantId/start`
-- `POST /sessions/:tenantId/restart`
-- `POST /sessions/:tenantId/disconnect`
-- `POST /sessions/:tenantId/send`
+- `POST /sessions/:tenantId/:sessionId/restart`
+- `POST /sessions/:tenantId/:sessionId/disconnect`
+- `POST /sessions/:tenantId/:sessionId/sync-history`
+- `POST /sessions/:tenantId/:sessionId/send`
 
 ## Observacao
 
-Esse modulo e experimental e nao substitui a integracao oficial da Meta. Use quando precisar de uma sessao QR pareada fora do fluxo Cloud API.
+Esse modulo e experimental e nao substitui a integracao oficial da Meta. Use quando precisar operar numeros adicionais por QR fora do fluxo Cloud API.

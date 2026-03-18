@@ -18,11 +18,11 @@ public sealed class WhatsAppWebSessionService(
     private string? BridgeBaseUrl => NormalizeBaseUrl(configuration["WhatsAppWebBridge:BaseUrl"]);
     private string? BridgeApiKey => configuration["WhatsAppWebBridge:ApiKey"];
 
-    public async Task<WhatsAppWebSessionStateResponse> GetStateAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<WhatsAppWebSessionListResponse> GetSessionsAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(BridgeBaseUrl))
         {
-            return BuildNotConfiguredState();
+            return new WhatsAppWebSessionListResponse([BuildNotConfiguredState()]);
         }
 
         try
@@ -32,11 +32,86 @@ public sealed class WhatsAppWebSessionService(
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                return new WhatsAppWebSessionListResponse([
+                    new WhatsAppWebSessionStateResponse(
+                        true,
+                        "bridge_error",
+                        $"A bridge QR respondeu com erro {(int)response.StatusCode}: {body}",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        true,
+                        false,
+                        false,
+                        0,
+                        null)
+                ]);
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<WhatsAppWebSessionListResponse>(JsonOptions, cancellationToken);
+            return payload ?? new WhatsAppWebSessionListResponse([
+                new WhatsAppWebSessionStateResponse(
+                    true,
+                    "empty_response",
+                    "A bridge QR nao retornou estado das sessoes.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    true,
+                    false,
+                    false,
+                    0,
+                    null)
+            ]);
+        }
+        catch (Exception ex)
+        {
+            var isHealthy = await ProbeBridgeHealthAsync();
+            return new WhatsAppWebSessionListResponse([
+                new WhatsAppWebSessionStateResponse(
+                    true,
+                    "bridge_unreachable",
+                    BuildBridgeUnavailableMessage("consultar", ex, isHealthy),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    true,
+                    false,
+                    false,
+                    0,
+                    null)
+            ]);
+        }
+    }
+
+    public async Task<WhatsAppWebSessionStateResponse> GetStateAsync(Guid tenantId, string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(BridgeBaseUrl))
+        {
+            return BuildNotConfiguredState();
+        }
+
+        try
+        {
+            using var client = CreateClient();
+            using var response = await client.GetAsync($"/sessions/{tenantId}/{Uri.EscapeDataString(sessionId)}", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 return new WhatsAppWebSessionStateResponse(
                     true,
                     "bridge_error",
                     $"A bridge QR respondeu com erro {(int)response.StatusCode}: {body}",
-                    null,
+                    sessionId,
                     null,
                     null,
                     null,
@@ -50,21 +125,7 @@ public sealed class WhatsAppWebSessionService(
             }
 
             var payload = await response.Content.ReadFromJsonAsync<WhatsAppWebSessionStateResponse>(JsonOptions, cancellationToken);
-            return payload ?? new WhatsAppWebSessionStateResponse(
-                true,
-                "empty_response",
-                "A bridge QR nao retornou estado da sessao.",
-                null,
-                null,
-                null,
-                null,
-                null,
-                DateTimeOffset.UtcNow,
-                true,
-                false,
-                false,
-                0,
-                null);
+            return payload ?? BuildNotConfiguredState();
         }
         catch (Exception ex)
         {
@@ -73,7 +134,7 @@ public sealed class WhatsAppWebSessionService(
                 true,
                 "bridge_unreachable",
                 BuildBridgeUnavailableMessage("consultar", ex, isHealthy),
-                null,
+                sessionId,
                 null,
                 null,
                 null,
@@ -92,24 +153,24 @@ public sealed class WhatsAppWebSessionService(
         return SendActionAsync(tenantId, $"/sessions/{tenantId}/start", request, cancellationToken);
     }
 
-    public Task<WhatsAppWebSessionActionResponse> RestartAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public Task<WhatsAppWebSessionActionResponse> RestartAsync(Guid tenantId, string sessionId, CancellationToken cancellationToken = default)
     {
-        return SendActionAsync(tenantId, $"/sessions/{tenantId}/restart", new { }, cancellationToken);
+        return SendActionAsync(tenantId, $"/sessions/{tenantId}/{Uri.EscapeDataString(sessionId)}/restart", new { }, cancellationToken);
     }
 
-    public Task<WhatsAppWebSessionActionResponse> DisconnectAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public Task<WhatsAppWebSessionActionResponse> DisconnectAsync(Guid tenantId, string sessionId, CancellationToken cancellationToken = default)
     {
-        return SendActionAsync(tenantId, $"/sessions/{tenantId}/disconnect", new { }, cancellationToken);
+        return SendActionAsync(tenantId, $"/sessions/{tenantId}/{Uri.EscapeDataString(sessionId)}/disconnect", new { }, cancellationToken);
     }
 
-    public Task<WhatsAppWebSessionActionResponse> SyncHistoryAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public Task<WhatsAppWebSessionActionResponse> SyncHistoryAsync(Guid tenantId, string sessionId, CancellationToken cancellationToken = default)
     {
-        return SendActionAsync(tenantId, $"/sessions/{tenantId}/sync-history", new { }, cancellationToken);
+        return SendActionAsync(tenantId, $"/sessions/{tenantId}/{Uri.EscapeDataString(sessionId)}/sync-history", new { }, cancellationToken);
     }
 
-    public Task<WhatsAppWebSessionActionResponse> SendMessageAsync(Guid tenantId, SendWhatsAppWebSessionMessageRequest request, CancellationToken cancellationToken = default)
+    public Task<WhatsAppWebSessionActionResponse> SendMessageAsync(Guid tenantId, string sessionId, SendWhatsAppWebSessionMessageRequest request, CancellationToken cancellationToken = default)
     {
-        return SendActionAsync(tenantId, $"/sessions/{tenantId}/send", request, cancellationToken);
+        return SendActionAsync(tenantId, $"/sessions/{tenantId}/{Uri.EscapeDataString(sessionId)}/send", request, cancellationToken);
     }
 
     private async Task<WhatsAppWebSessionActionResponse> SendActionAsync(Guid tenantId, string path, object body, CancellationToken cancellationToken)
@@ -176,9 +237,15 @@ public sealed class WhatsAppWebSessionService(
 
     private async Task<WhatsAppWebSessionStateResponse?> GetStateAsyncFromBridgeSafe(Guid tenantId, CancellationToken cancellationToken)
     {
+        var sessions = await GetSessionsAsyncFromBridgeSafe(tenantId, cancellationToken);
+        return sessions?.Sessions.FirstOrDefault();
+    }
+
+    private async Task<WhatsAppWebSessionListResponse?> GetSessionsAsyncFromBridgeSafe(Guid tenantId, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(BridgeBaseUrl))
         {
-            return BuildNotConfiguredState();
+            return new WhatsAppWebSessionListResponse([BuildNotConfiguredState()]);
         }
 
         try
@@ -190,7 +257,7 @@ public sealed class WhatsAppWebSessionService(
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<WhatsAppWebSessionStateResponse>(JsonOptions, cancellationToken);
+            return await response.Content.ReadFromJsonAsync<WhatsAppWebSessionListResponse>(JsonOptions, cancellationToken);
         }
         catch
         {

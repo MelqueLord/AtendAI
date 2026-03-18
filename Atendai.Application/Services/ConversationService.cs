@@ -19,18 +19,21 @@ public sealed class ConversationService(
     ICampaignAutomationService campaignAutomationService,
     ITenantWhatsAppService tenantWhatsAppService,
     ICrmService crmService,
-    IAttendanceRealtimeNotifier realtimeNotifier) : IConversationService
+    IAttendanceRealtimeNotifier realtimeNotifier,
+    IWhatsAppWebSessionService whatsAppWebSessionService) : IConversationService
 {
     private static readonly TimeSpan HumanModeHoldWindow = TimeSpan.FromMinutes(30);
 
     public async Task<List<ConversationResponse>> GetConversationsAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
+        await EnsureQrHistoryConsistencyAsync(tenantId, cancellationToken);
         var conversations = await conversationRepository.GetConversationSummariesAsync(tenantId, cancellationToken);
         return conversations.Select(MapConversation).ToList();
     }
 
     public async Task<ConversationResponse?> GetConversationByIdAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken = default)
     {
+        await EnsureQrHistoryConsistencyAsync(tenantId, cancellationToken);
         var conversation = await conversationRepository.GetConversationByIdAsync(tenantId, conversationId, cancellationToken);
         return conversation is null ? null : MapConversation(conversation);
     }
@@ -189,8 +192,8 @@ public sealed class ConversationService(
             {
                 var sender = chat.LastMessageFromMe ? "HumanAgent" : "Customer";
                 var currentStatus = currentConversation?.Status ?? conversation.Status;
-                var restoredStatus = currentStatus is ConversationStatus.WaitingHuman or ConversationStatus.HumanHandling or ConversationStatus.Closed
-                    ? currentStatus
+                var restoredStatus = currentStatus is ConversationStatus.Closed
+                    ? ConversationStatus.Closed
                     : ConversationStatus.BotHandling;
 
                 await conversationRepository.AddConversationMessageAsync(tenantId, conversation.Id, sender, lastMessage, cancellationToken);
@@ -358,10 +361,21 @@ public sealed class ConversationService(
     {
         return inboxRepository.DeleteQuickReplyTemplateAsync(tenantId, templateId, cancellationToken);
     }
-private async Task<string> ResolveCustomerNameAsync(Guid tenantId, string customerPhone, string? incomingName, CancellationToken cancellationToken)
+    private async Task<string> ResolveCustomerNameAsync(Guid tenantId, string customerPhone, string? incomingName, CancellationToken cancellationToken)
     {
         var existingContact = await contactRepository.FindContactByPhoneAsync(tenantId, customerPhone, cancellationToken);
         return CustomerIdentityResolver.ResolveDisplayName(customerPhone, existingContact?.Name, incomingName);
+    }
+
+    private async Task EnsureQrHistoryConsistencyAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var qrSessions = await whatsAppWebSessionService.GetSessionsAsync(tenantId, cancellationToken);
+        if (qrSessions.Sessions.Any(session => string.Equals(session.Status, "connected", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        await conversationRepository.ClearQrConversationHistoryAsync(tenantId, cancellationToken: cancellationToken);
     }
 
     private static bool ShouldKeepHumanMode(Conversation conversation, DateTimeOffset now)
