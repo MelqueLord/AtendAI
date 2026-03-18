@@ -185,8 +185,8 @@ public sealed class EngagementController(
         return Ok(result);
     }
 
-    [HttpGet("whatsapp/web/session")]
-    public async Task<IActionResult> GetWhatsAppWebSession(CancellationToken cancellationToken)
+    [HttpGet("whatsapp/web/sessions")]
+    public async Task<IActionResult> GetWhatsAppWebSessions(CancellationToken cancellationToken)
     {
         var tenantId = User.GetTenantId();
         if (tenantId is null)
@@ -194,7 +194,20 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        var state = await whatsAppWebSessionService.GetStateAsync(tenantId.Value, cancellationToken);
+        var sessions = await whatsAppWebSessionService.GetSessionsAsync(tenantId.Value, cancellationToken);
+        return Ok(sessions);
+    }
+
+    [HttpGet("whatsapp/web/session/{sessionId}")]
+    public async Task<IActionResult> GetWhatsAppWebSession(string sessionId, CancellationToken cancellationToken)
+    {
+        var tenantId = User.GetTenantId();
+        if (tenantId is null)
+        {
+            return Unauthorized(new { message = "Tenant nao identificado." });
+        }
+
+        var state = await whatsAppWebSessionService.GetStateAsync(tenantId.Value, sessionId, cancellationToken);
         return Ok(state);
     }
 
@@ -211,8 +224,8 @@ public sealed class EngagementController(
         return Ok(result);
     }
 
-    [HttpPost("whatsapp/web/session/restart")]
-    public async Task<IActionResult> RestartWhatsAppWebSession(CancellationToken cancellationToken)
+    [HttpPost("whatsapp/web/session/{sessionId}/restart")]
+    public async Task<IActionResult> RestartWhatsAppWebSession(string sessionId, CancellationToken cancellationToken)
     {
         var tenantId = User.GetTenantId();
         if (tenantId is null)
@@ -220,12 +233,12 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        var result = await whatsAppWebSessionService.RestartAsync(tenantId.Value, cancellationToken);
+        var result = await whatsAppWebSessionService.RestartAsync(tenantId.Value, sessionId, cancellationToken);
         return Ok(result);
     }
 
-    [HttpPost("whatsapp/web/session/disconnect")]
-    public async Task<IActionResult> DisconnectWhatsAppWebSession(CancellationToken cancellationToken)
+    [HttpPost("whatsapp/web/session/{sessionId}/disconnect")]
+    public async Task<IActionResult> DisconnectWhatsAppWebSession(string sessionId, CancellationToken cancellationToken)
     {
         var tenantId = User.GetTenantId();
         if (tenantId is null)
@@ -233,11 +246,11 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        var currentState = await whatsAppWebSessionService.GetStateAsync(tenantId.Value, cancellationToken);
+        var currentState = await whatsAppWebSessionService.GetStateAsync(tenantId.Value, sessionId, cancellationToken);
         var qrSessionKey = !string.IsNullOrWhiteSpace(currentState.PhoneNumber)
             ? currentState.PhoneNumber
             : currentState.SessionId;
-        var result = await whatsAppWebSessionService.DisconnectAsync(tenantId.Value, cancellationToken);
+        var result = await whatsAppWebSessionService.DisconnectAsync(tenantId.Value, sessionId, cancellationToken);
         if (result.Success)
         {
             var removedConversations = await conversationService.ClearWhatsAppWebHistoryAsync(tenantId.Value, qrSessionKey, cancellationToken);
@@ -252,8 +265,8 @@ public sealed class EngagementController(
         return Ok(result);
     }
 
-    [HttpPost("whatsapp/web/session/sync-history")]
-    public async Task<IActionResult> SyncWhatsAppWebSessionHistory(CancellationToken cancellationToken)
+    [HttpPost("whatsapp/web/session/{sessionId}/sync-history")]
+    public async Task<IActionResult> SyncWhatsAppWebSessionHistory(string sessionId, CancellationToken cancellationToken)
     {
         var tenantId = User.GetTenantId();
         if (tenantId is null)
@@ -261,12 +274,12 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        var result = await whatsAppWebSessionService.SyncHistoryAsync(tenantId.Value, cancellationToken);
+        var result = await whatsAppWebSessionService.SyncHistoryAsync(tenantId.Value, sessionId, cancellationToken);
         return Ok(result);
     }
 
-    [HttpPost("whatsapp/web/session/send")]
-    public async Task<IActionResult> SendWhatsAppWebSessionMessage([FromBody] SendWhatsAppWebSessionMessageRequest request, CancellationToken cancellationToken)
+    [HttpPost("whatsapp/web/session/{sessionId}/send")]
+    public async Task<IActionResult> SendWhatsAppWebSessionMessage(string sessionId, [FromBody] SendWhatsAppWebSessionMessageRequest request, CancellationToken cancellationToken)
     {
         var tenantId = User.GetTenantId();
         if (tenantId is null)
@@ -274,7 +287,7 @@ public sealed class EngagementController(
             return Unauthorized(new { message = "Tenant nao identificado." });
         }
 
-        var result = await whatsAppWebSessionService.SendMessageAsync(tenantId.Value, request, cancellationToken);
+        var result = await whatsAppWebSessionService.SendMessageAsync(tenantId.Value, sessionId, request, cancellationToken);
         return Ok(result);
     }
 
